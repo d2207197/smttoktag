@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-
 import luigi
 import subprocess
 from pathlib import Path
+import tables as tb
 
 
-class PTable(luigi.Task):
+class PTable(tb.IsDescription):
+    zh = tb.StringCol(200)
+    zh_seg = tb.StringCol(205)
+    tag = tb.StringCol(100)
+    count = tb.Int32Col()
+    pr = tb.Float64Col()
+
+
+class PhraseTable(luigi.Task):
 
     def output(self):
-        return luigi.LocalTarget('data/zh.pos.tag.ptable.shelve')
+        return luigi.LocalTarget('data/zh.pos.tag.ptable.h5')
 
     def requires(self):
         return InputText()
@@ -23,8 +31,8 @@ class PTable(luigi.Task):
     @staticmethod
     def ngram_pairs(words1, words2):
         for l in range(1, 5 + 1):
-            words1_ngrams = PTable.ngrams(words1, l)
-            words2_ngrams = PTable.ngrams(words2, l)
+            words1_ngrams = PhraseTable.ngrams(words1, l)
+            words2_ngrams = PhraseTable.ngrams(words2, l)
             yield from zip(words1_ngrams, words2_ngrams)
 
     @staticmethod
@@ -32,31 +40,68 @@ class PTable(luigi.Task):
         for i, line in enumerate(lines, 1):
             zhs, tags = line.strip().rsplit('|||', 1)
             zhs, tags = zhs.split('\t'), tags.split('\t')
-            if i % 1000 == 0:
+            if i % 100000 == 0:
                 print('{:,}'.format(i))
                 # return
-            yield from PTable.ngram_pairs(zhs, tags)
+            yield from PhraseTable.ngram_pairs(zhs, tags)
 
     def run(self):
         from collections import Counter
         translate_count = Counter()
         print('Counting ngrams...')
         with self.input().open('r') as inf:  # , self.output().open('w') as outf:
-            translate_count.update(PTable.ngram_pairs_from_lines(inf))
+            translate_count.update(PhraseTable.ngram_pairs_from_lines(inf))
 
-        print(translate_count.most_common(5))
+        # print(translate_count.most_common(5))
         print('Building numpy array...')
-        # translate_count = list((zhs, tags, count) for (zhs, tags), count in translate_count.items())
         print('Calculating translation prob')
         counts_sum = sum(translate_count.values())
 
         print('Writing translation prob to `{}`'.format(self.output().fn))
-        # import lzma
-        # import json
-        import shelve
-        with shelve.open(self.output().fn, flag='n', protocol=4) as translate_model:
-            for (zhs, tags), count in translate_count.items():
-                translate_model[zhs.replace(' ', '')] = (zhs, tags, count / counts_sum)
+
+        with tb.open_file(self.output().fn, mode='w', title='Phrase Table') as h5file:
+
+            filters = tb.Filters(complevel=9, complib='blosc')
+            group = h5file.create_group("/", 'ptable', 'Phrase Table')
+
+            table = h5file.create_table(
+                group, 'ptable',
+                description=PTable,
+                title='Phrase Table',
+                filters=filters,
+                expectedrows=21626879,
+                chunkshape=(216268,)
+            )
+            print(h5file)
+            phrase_data = table.row
+            for (zh, tag), count in translate_count.items():
+                # t.cols.zh.dtype.itemsize
+                # t.coldtypes['zh'].itemsize
+                data = zh.replace(' ', '').encode('utf8')
+                if len(data) > table.coldtypes['zh'].itemsize:
+                    print('zh', len(data))
+                    raise AssertionError
+                phrase_data['zh'] = data
+
+                data = zh.encode('utf8')
+                if len(data) > table.coldtypes['zh_seg'].itemsize:
+                    print('zh_seg', len(data))
+                    raise AssertionError
+                phrase_data['zh_seg'] = zh.encode('utf8')
+
+                data = tag.encode('utf8')
+                if len(data) > table.coldtypes['tag'].itemsize:
+                    print('tag:', len(data))
+                    raise AssertionError
+                phrase_data['tag'] = tag.encode('utf8')
+
+                phrase_data['count'] = count
+                phrase_data['pr'] = count / counts_sum
+                phrase_data.append()
+                # translate_model[zhs.replace(' ', '')] = (zhs, tags, count / counts_sum)
+            table.flush()
+            # table.cols.zh.create_index(optlevel=6, kind='medium', filters=filters)
+            table.cols.zh.create_csindex(filters=filters)
 
 
 class ZhPosTagBLM(luigi.Task):
