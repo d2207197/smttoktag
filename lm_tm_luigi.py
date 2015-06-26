@@ -5,6 +5,33 @@ import luigi
 import subprocess
 from pathlib import Path
 import tables as tb
+import seg
+
+
+class ZhNPSeg(luigi.Task):
+
+    def requires(self):
+        return OxfordNP_ench()
+
+    def output(self):
+        return luigi.LocalTarget('data/np.seg.txt')
+
+    def run(self):
+        with self.input().open('r') as np_ench_file:
+            for line in np_ench_file:
+                en, zh = line.strip().split('\t')
+                en = en.strip('.')
+                zh = zh.strip('。')
+                print('-' * 20)
+                print(zh)
+                print(en)
+                print(*seg.segprob(zh), sep='\n', end='\n\n')
+
+
+class OxfordNP_ench(luigi.ExternalTask):
+
+    def output(self):
+        return luigi.LocalTarget('data/oxford.np.ench.txt')
 
 
 class PTable(tb.IsDescription):
@@ -18,10 +45,10 @@ class PTable(tb.IsDescription):
 class PhraseTable(luigi.Task):
 
     def output(self):
-        return luigi.LocalTarget('data/zh.pos.tag.ptable.h5')
+        return luigi.LocalTarget('data/zh2toktag.ptable.h5')
 
     def requires(self):
-        return InputText()
+        return SBC4()
 
     @staticmethod
     def ngrams(words, l):
@@ -62,15 +89,15 @@ class PhraseTable(luigi.Task):
         with tb.open_file(self.output().fn, mode='w', title='Phrase Table') as h5file:
 
             filters = tb.Filters(complevel=9, complib='blosc')
-            group = h5file.create_group("/", 'ptable', 'Phrase Table')
+            # group = h5file.create_group("/", 'ptable', 'Phrase Table')
 
             table = h5file.create_table(
-                group, 'ptable',
+                '/', 'phrasetable',
                 description=PTable,
                 title='Phrase Table',
                 filters=filters,
                 expectedrows=21626879,
-                chunkshape=(216268,)
+                chunkshape=(21626,)
             )
             print(h5file)
             phrase_data = table.row
@@ -139,7 +166,7 @@ class ZhPosTagLM(luigi.Task):
 class ZhPosData(luigi.Task):
 
     def requires(self):
-        return InputText()
+        return SBC4()
 
     def output(self):
         return luigi.LocalTarget("data/zh.pos.tag")
@@ -154,7 +181,7 @@ class ZhPosData(luigi.Task):
                 print(*tags, file=outf, sep=' ')
 
 
-class InputText(luigi.ExternalTask):
+class SBC4(luigi.ExternalTask):
 
     def output(self):
         return luigi.LocalTarget('data/SBC4')
