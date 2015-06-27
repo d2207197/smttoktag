@@ -34,6 +34,7 @@ from functools import lru_cache
 from math import log
 import sys
 import tools
+from functools import update_wrapper
 
 
 class PyTablesTM:
@@ -56,6 +57,9 @@ class PyTablesTM:
 
             for x in self.pytables.where('zh == {}'.format(repr(zh.encode('utf8'))))]
 
+    __call__ = __getitem__
+    update_wrapper(__call__, __getitem__)
+
 
 class KenLM:
 
@@ -66,12 +70,16 @@ class KenLM:
         self.lm = kenlm.LanguageModel(blm_path)
 
     @tools.methdispatch
+    @lru_cache()
     def __getitem__(self, tags):
         return self.lm.score(tags)
 
     @__getitem__.register(tuple)
     def _(self, tags):
         return self.lm.score(' '.join(tags))
+
+    __call__ = __getitem__
+    update_wrapper(__call__, __getitem__)
 
 
 @lru_cache()
@@ -82,45 +90,62 @@ def allpartition(seq):
         for part1, part2 in allpartition(seq[1:]):
             yield seq[0:1] + part1, part2
 
+from operator import itemgetter, attrgetter
 
-# @lru_cache()
-# def allpartition(seq):
-#     yield seq[0:1], seq[1:]
-#     if len(seq) > 1:
-#         for part1, part2 in allpartition(seq[1:]):
-#             yield seq[0:1] + part1, part2
-from operator import itemgetter
+from itertools import groupby
 
 
 class ZhTokTagger:
 
+    'Chinese sentence tokenizer and Part-Of-Speech tagger'
+
     def __init__(self, tm, lm):
-        'Chinese sentence tokenizer and Part-Of-Speech tagger'
         self.tm = tm
         self.lm = lm
 
+    def _topN_seginfos(self, seginfos, n):
+
+        def groupby_tag(seginfos):
+            tag_getter = attrgetter('tag')
+            return (subiter for key, subiter in groupby(sorted(seginfos, key=tag_getter), key=tag_getter))
+
+        def append_lmpr_tmlmpr(seginfo):
+            lm_pr = self.lm[seginfo.tag]
+            return seginfo, lm_pr, lm_pr + seginfo.pr
+
+        def top1_pr(seginfos):
+            return sorted(seginfos)[-1]
+
+        top1_pr_seginfo_of_each_tag = (top1_pr(seginfos_of_same_tag)
+                                       for seginfos_of_same_tag in groupby_tag(seginfos))
+
+        return sorted((append_lmpr_tmlmpr(seginfo) for seginfo in top1_pr_seginfo_of_each_tag), key=itemgetter(-1))[-n:]
+
     @lru_cache()
-    def __call__(self, zh_chars):
+    def _tok_tag(self, zh_chars):
         tm_out = []
         for part1, part2 in allpartition(zh_chars):
             seginfos1 = self.tm[part1]
-            for seginfo1 in seginfos1:
-                if part2:
+            if not part2:
+                tm_out.extend(seginfos1)
+            else:
+                for seginfo1 in seginfos1:
                     tm_out.extend(
-                        seginfo1 + seginfo2 for score, lm_pr, seginfo2 in self.__call__(part2))
-                else:
-                    tm_out.append(seginfo1)
+                        seginfo1 + seginfo2 for seginfo2, lm_pr, tmlm_pr in self._tok_tag(part2))
 
-        tm_out = sorted(((self.lm[seginfo.tag] + seginfo.pr, self.lm[seginfo.tag], seginfo)
-                         for seginfo in tm_out), key=itemgetter(0))[-5:]
-        return tm_out
+        return self._topN_seginfos(tm_out, 5)
+
+    def __call__(self, zh_chars):
+        seginfo, lm_pr, tmlm_pr = self._tok_tag(zh_chars.strip())[-1]
+        return tuple(seginfo) + (lm_pr, tmlm_pr)
 
 
 if __name__ == '__main__':
     import fileinput
     toktagger = ZhTokTagger(
-        PyTablesTM('data/zh2toktag.ptable.h5', '/phrasetable'), KenLM('data/zh.pos.tag.blm'))
+        tm=PyTablesTM('data/zh2toktag.ptable.h5', '/phrasetable'),
+        lm=KenLM('data/zh.pos.tag.blm'))
 
     for line in fileinput.input():
         zh_chars = line.strip()
-        print(*toktagger(zh_chars), sep='\n', end='\n\n')
+        print(*toktagger(zh_chars), sep='\t')

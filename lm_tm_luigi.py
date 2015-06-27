@@ -5,10 +5,31 @@ import luigi
 import subprocess
 from pathlib import Path
 import tables as tb
-import seg
+from toktagger import ZhTokTagger, KenLM, PyTablesTM
+import concurrent.futures
 
 
-class ZhNPSeg(luigi.Task):
+class SBC4TokTag(luigi.Task):
+
+    def requires(self):
+        return SBC4Zh()
+
+    def output(self):
+        return luigi.LocalTarget('data/SBC4.zh.lm_retoktag')
+
+    def run(self):
+        toktagger = ZhTokTagger(
+            tm=PyTablesTM('data/zh2toktag.ptable.h5', '/phrasetable'),
+            lm=KenLM('data/zh.pos.tag.blm'))
+        with self.input().open('r') as sbc4_zh_file:
+            for zh, zh_seg, tag, *_ in map(toktagger, sbc4_zh_file):
+                zh_seg = zh_seg.split()
+                tag = tag.split()
+                print(*zh_seg, sep='\t', end='|||')
+                print(*tag, sep='\t')
+
+
+class ZhNPTokTag(luigi.Task):
 
     def requires(self):
         return OxfordNP_ench()
@@ -17,6 +38,10 @@ class ZhNPSeg(luigi.Task):
         return luigi.LocalTarget('data/np.seg.txt')
 
     def run(self):
+        toktagger = ZhTokTagger(
+            tm=PyTablesTM('data/zh2toktag.ptable.h5', '/phrasetable'),
+            lm=KenLM('data/zh.pos.tag.blm'))
+
         with self.input().open('r') as np_ench_file:
             for line in np_ench_file:
                 en, zh = line.strip().split('\t')
@@ -25,7 +50,7 @@ class ZhNPSeg(luigi.Task):
                 print('-' * 20)
                 print(zh)
                 print(en)
-                print(*seg.segprob(zh), sep='\n', end='\n\n')
+                print(*toktagger(zh), sep='\n', end='\n\n')
 
 
 class OxfordNP_ench(luigi.ExternalTask):
@@ -181,6 +206,24 @@ class ZhPosData(luigi.Task):
                 print(*tags, file=outf, sep=' ')
 
 
+class SBC4Zh(luigi.Task):
+
+    def requires(self):
+        return SBC4()
+
+    def output(self):
+        return luigi.LocalTarget('data/SBC4.zh')
+
+    def run(self):
+
+        with self.input().open('r') as inf, self.output().open('w') as outf:
+            for line in inf:
+                zh, tag = line.strip().rsplit('|||', 1)
+                zh = zh.replace('\t', '')
+
+                print(zh, file=outf)
+
+
 class SBC4(luigi.ExternalTask):
 
     def output(self):
@@ -188,7 +231,3 @@ class SBC4(luigi.ExternalTask):
 
 if __name__ == "__main__":
     luigi.run()
-
-# Local Variables:
-# flycheck-python-flake8-executable: "flake83"
-# End:
