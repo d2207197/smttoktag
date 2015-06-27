@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from seg import ZhTokTagger, PyTablesTM, KenLM
+from toktagger import ZhTokTagger, PyTablesTM, KenLM
 import concurrent.futures
 import fileinput
 
