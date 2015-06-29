@@ -164,7 +164,7 @@ def argparser(args=sys.argv[1:]):
         '--language-model', '-l', metavar='KENLM_BLM_PATH', help='KenLM BLM', required=True)
 
     parser.add_argument(
-        '--format', '-f', nargs=1, default='/',  help='output format', choices=['verbose', 'tab', '/'])
+        '--format', '-f',  default='/',  help='output format', choices=['verbose', 'tab', '/'])
     parser.add_argument('FILE', nargs='*', help='input file(text in chinese)')
 
     return parser.parse_args(args)
@@ -180,6 +180,7 @@ if __name__ == '__main__':
     for line in fileinput.input(cmd_options.FILE):
         zh_chars = line.strip()
         tagger_out = toktagger(zh_chars)
+
         if cmd_options.format == 'verbose':
             print(*tagger_out, sep='\t')
         elif cmd_options.format == 'tab':
