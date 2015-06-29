@@ -102,7 +102,8 @@ class ZhTokTagger:
 
 >>> zhttagger = ZhTokTagger( tm = PyTablesTM('path/to/h5file', '/pytable/path'), lm = KenLM('path/to/blm'))
 >>> zhtagger('今天出去玩')
-("今天出去玩", "今天 出去 玩", "Nd VA VC", "Nd + VA VC", -22.90191810211992, -8.768468856811523, -31.670386958931445)
+("今天出去玩", "今天 出去 玩", "Nd VA VC", "Nd + VA VC", - \
+ 22.90191810211992, -8.768468856811523, -31.670386958931445)
 '''
 
     def __init__(self, tm, lm):
@@ -149,15 +150,40 @@ class ZhTokTagger:
             seginfo, lm_pr, tmlm_pr = out[-1]
             return tuple(seginfo) + (lm_pr, tmlm_pr)
         else:
-            return (zh_chars, zh_chars, "", "", -99, -99, -99)
+            return (zh_chars, zh_chars, "", "", -999, -999, -999)
 
+
+import argparse
+
+
+def argparser(args=sys.argv[1:]):
+    parser = argparse.ArgumentParser(description='Chinese tokenzier and Part-Of-Speech tagger.')
+    parser.add_argument(
+        '--translation-model', '-t', nargs=2, metavar=('H5_FILE_PATH', 'PYTABLE_PATH'), help='Pytables Phrase Table', required=True)
+    parser.add_argument(
+        '--language-model', '-l', metavar='KENLM_BLM_PATH', help='KenLM BLM', required=True)
+
+    parser.add_argument(
+        '--format', '-f', nargs=1, default='/',  help='output format', choices=['verbose', 'tab', '/'])
+    parser.add_argument('FILE', nargs='*', help='input file(text in chinese)')
+
+    return parser.parse_args(args)
 
 if __name__ == '__main__':
     import fileinput
-    toktagger = ZhTokTagger(
-        tm=PyTablesTM('data/zh2toktag.ptable.h5', '/phrasetable'),
-        lm=KenLM('data/zh.pos.tag.blm'))
+    cmd_options = argparser()
 
-    for line in fileinput.input():
+    toktagger = ZhTokTagger(
+        tm=PyTablesTM(cmd_options.translation_model[0], cmd_options.translation_model[1]),
+        lm=KenLM(cmd_options.language_model))
+
+    for line in fileinput.input(cmd_options.FILE):
         zh_chars = line.strip()
-        print(*toktagger(zh_chars), sep='\t')
+        tagger_out = toktagger(zh_chars)
+        if cmd_options.format == 'verbose':
+            print(*tagger_out, sep='\t')
+        elif cmd_options.format == 'tab':
+            print(tagger_out[1], tagger_out[2], sep='\t')
+        elif cmd_options.format == '/':
+            print(*('{}/{}'.format(zh, tag)
+                    for zh, tag in zip(tagger_out[1].split(), tagger_out[2].split())))
