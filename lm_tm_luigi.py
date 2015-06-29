@@ -9,6 +9,63 @@ from toktagger import ZhTokTagger, KenLM, PyTablesTM
 import concurrent.futures
 
 
+def pairwise(iterable):
+    "s -> (s0,s1), (s2,s3), (s4, s5), ..."
+    a = iter(iterable)
+    return zip(a, a)
+
+import goslate
+
+gtranslate = goslate.Goslate(retry_times=30, timeout=60).translate
+
+
+def translate_score(en, ch):
+    en_from_ch = gtranslate(ch, 'en')
+    en = set(en.lower().split())
+    # print(en_from_ch)
+    en_from_ch = set(en_from_ch.lower().split())
+    score = len(en & en_from_ch) / len(en | en_from_ch)
+    return score * len(en)
+
+
+class LTN_Parallel_Sent_Tok(luigi.Task):
+
+    def requires(self):
+        return LTN_News()
+
+    def output(self):
+        return luigi.LocalTarget('data/ltn_news.sent_tok.txt')
+
+    def run(self):
+        from nltk.tokenize import sent_tokenize
+        from nltk.tokenize import RegexpTokenizer
+        ch_sent_tokenize = RegexpTokenizer('(?:[^。「」！？]*(「[^」]*」)?[^。「」！？]*)+[。！？；]?').tokenize
+        import sys
+
+        with self.input().open('r') as input_file, self.output().open('w') as output_file:
+            for en, ch in pairwise(input_file):
+                en, ch = en.strip(), ch.strip()
+                ens = sent_tokenize(en)
+                chs = [sub_ch for sub_ch in ch_sent_tokenize(ch) if sub_ch != '']
+
+                score = 0
+                if len(ens) != len(chs):
+                    print('Unmatched sentences length:', ens, chs, file=sys.stderr)
+                    continue
+
+                score = sum(translate_score(en, ch)
+                            for en, ch in zip(ens, chs)) / len(en.split())
+
+                for en, ch in zip(ens, chs):
+                    print(score, en, ch, sep='\t', file=output_file)
+
+
+class LTN_News(luigi.ExternalTask):
+
+    def output(self):
+        return luigi.LocalTarget('data/ltn_news.txt')
+
+
 class SBC4TokTag(luigi.Task):
 
     def requires(self):
@@ -29,28 +86,37 @@ class SBC4TokTag(luigi.Task):
                 print(*tag, sep='\t')
 
 
-class ZhNPTokTag(luigi.Task):
+class NPTokTag(luigi.Task):
+
+    def requires(self):
+        return OxfordNP_ch()
+
+    def output(self):
+        return luigi.LocalTarget('data/oxford.np.ch.toktag.txt')
+
+    def run(self):
+        from subprocess import call
+        import shlex
+        cmd = shlex.split(
+            'parallel -k --block-size 0.5k --pipe ". /usr/local/bin/virtualenvwrapper.sh ;workon py3; ./toktag_to_sbc4fmt.py"')
+        retcode = call(cmd, stdin=self.input().open('r'), stdout=self.output().open('w'))
+        assert retcode == 0
+
+
+class OxfordNP_ch(luigi.Task):
 
     def requires(self):
         return OxfordNP_ench()
 
     def output(self):
-        return luigi.LocalTarget('data/np.seg.txt')
+        return luigi.LocalTarget('data/oxford.np.ch.txt')
 
     def run(self):
-        toktagger = ZhTokTagger(
-            tm=PyTablesTM('data/zh2toktag.ptable.h5', '/phrasetable'),
-            lm=KenLM('data/zh.pos.tag.blm'))
-
-        with self.input().open('r') as np_ench_file:
-            for line in np_ench_file:
-                en, zh = line.strip().split('\t')
-                en = en.strip('.')
-                zh = zh.strip('。')
-                print('-' * 20)
-                print(zh)
-                print(en)
-                print(*toktagger(zh), sep='\n', end='\n\n')
+        with self.input().open('r') as input_file, self.output().open('w') as output_file:
+            for line in input_file:
+                en, ch = line.strip().split('\t')
+                ch = ch.strip('。')
+                print(ch, file=output_file)
 
 
 class OxfordNP_ench(luigi.ExternalTask):
