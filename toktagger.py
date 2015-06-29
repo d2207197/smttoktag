@@ -42,6 +42,7 @@ class PyTablesTM:
     "Translation Model from PyTables"
 
     def __init__(self, h5_file_path, h5_path):
+        '''create an object for querying PyTables translation model'''
         import tables as tb
         h5 = tb.open_file(h5_file_path)
         self.pytables = h5.get_node(h5_path)
@@ -97,7 +98,12 @@ from itertools import groupby
 
 class ZhTokTagger:
 
-    'Chinese sentence tokenizer and Part-Of-Speech tagger'
+    '''Chinese sentence tokenizer and Part-Of-Speech tagger
+
+>>> zhttagger = ZhTokTagger( tm = PyTablesTM('path/to/h5file', '/pytable/path'), lm = KenLM('path/to/blm'))
+>>> zhtagger('今天出去玩')
+("今天出去玩", "今天 出去 玩", "Nd VA VC", "Nd + VA VC", -22.90191810211992, -8.768468856811523, -31.670386958931445)
+'''
 
     def __init__(self, tm, lm):
         self.tm = tm
@@ -136,8 +142,14 @@ class ZhTokTagger:
         return self._topN_seginfos(tm_out, 5)
 
     def __call__(self, zh_chars):
-        seginfo, lm_pr, tmlm_pr = self._tok_tag(zh_chars.strip())[-1]
-        return tuple(seginfo) + (lm_pr, tmlm_pr)
+        '''>>> zhtagger('今天出去玩')
+("今天出去玩", "今天 出去 玩", "Nd VA VC", "Nd + VA VC", -22.90191810211992, -8.768468856811523, -31.670386958931445)'''
+        out = self._tok_tag(zh_chars.strip())
+        if out:
+            seginfo, lm_pr, tmlm_pr = out[-1]
+            return tuple(seginfo) + (lm_pr, tmlm_pr)
+        else:
+            return (zh_chars, zh_chars, "", "", -99, -99, -99)
 
 
 if __name__ == '__main__':
