@@ -86,10 +86,8 @@ class KenLM:
 @lru_cache()
 @tools.listify
 def allpartition(seq):
-    yield seq[0:1], seq[1:]
-    if len(seq) > 1:
-        for part1, part2 in allpartition(seq[1:]):
-            yield seq[0:1] + part1, part2
+    for length in range(1,len(seq)+1):
+        yield seq[0:length], seq[length:]
 
 from operator import itemgetter, attrgetter
 
