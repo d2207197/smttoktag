@@ -72,18 +72,20 @@ class SBC4TokTag(luigi.Task):
         return SBC4Zh()
 
     def output(self):
-        return luigi.LocalTarget('data/SBC4.zh.lm_retoktag')
+        return luigi.LocalTarget('data/SBC4.zh.toktag')
 
     def run(self):
-        toktagger = ZhTokTagger(
-            tm=PyTablesTM('data/zh2toktag.ptable.h5', '/phrasetable'),
-            lm=KenLM('data/zh.pos.tag.blm'))
-        with self.input().open('r') as sbc4_zh_file:
-            for zh, zh_seg, tag, *_ in map(toktagger, sbc4_zh_file):
-                zh_seg = zh_seg.split()
-                tag = tag.split()
-                print(*zh_seg, sep='\t', end='|||')
-                print(*tag, sep='\t')
+        from subprocess import call
+        import os
+        import shlex
+        cmd = shlex.split(
+            '''parallel -k --block-size 2k  --pipe 'source "{}/venv/bin/activate"; ./toktagger.py -t data/zh2toktag.ptable.h5 /phrasetable -l data/zh.pos.tag.blm -f /'
+   '''.format(os.getcwd()))
+        # cmd = shlex.split('echo hello world')
+        with self.output().open('w') as output_file:
+            # print('OUTPUT FILE', output_file)
+            retcode = call(cmd, stdin=self.input().open('r'), stdout=output_file)
+        assert retcode == 0
 
 
 class NPTokTag(luigi.Task):
@@ -92,14 +94,20 @@ class NPTokTag(luigi.Task):
         return OxfordNP_ch()
 
     def output(self):
-        return luigi.LocalTarget('data/oxford.np.ch.toktag.txt')
+        return luigi.LocalTarget('data/oxford.np.ch.toktag')
 
     def run(self):
         from subprocess import call
+        import os
         import shlex
         cmd = shlex.split(
-            'parallel -k --block-size 0.5k --pipe ". /usr/local/bin/virtualenvwrapper.sh ;workon py3; ./toktag_to_sbc4fmt.py"')
-        retcode = call(cmd, stdin=self.input().open('r'), stdout=self.output().open('w'))
+            '''parallel -k --block-size 2k  --pipe 'source "{}/venv/bin/activate"; ./toktagger.py -t data/zh2toktag.ptable.h5 /phrasetable -l data/zh.pos.tag.blm -f /'
+   '''.format(os.getcwd()))
+        # cmd = shlex.split('echo hello world')
+        with self.output().open('w') as output_file:
+            # print('OUTPUT FILE', output_file)
+            retcode = call(cmd, stdin=self.input().open('r'), stdout=output_file)
+        assert retcode == 0
         assert retcode == 0
 
 
@@ -290,10 +298,16 @@ class SBC4Zh(luigi.Task):
                 print(zh, file=outf)
 
 
+class TestZhData(luigi.ExternalTask):
+
+    def output(self):
+        return luigi.LocalTarget('data/testzh.txt')
+
+
 class SBC4(luigi.ExternalTask):
 
     def output(self):
         return luigi.LocalTarget('data/SBC4')
 
 if __name__ == "__main__":
-    luigi.run()
+    luigi.run(local_scheduler=True)
