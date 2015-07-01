@@ -14,6 +14,53 @@ def pairwise(iterable):
     a = iter(iterable)
     return zip(a, a)
 
+
+class DrEye_NPVP(luigi.Task):
+
+    def requires(self):
+        return DrEye_Phrases()
+
+    def output(self):
+        return {
+            'np': luigi.LocalTarget('data/dreye/dreye.np.txt'),
+            'pure_np': luigi.LocalTarget('data/dreye/dreye.pure_np.txt'),
+            'vp': luigi.LocalTarget('data/dreye/dreye.vp.txt')
+        }
+
+    def run(self):
+        from geniatagger import GeniaTaggerClient
+        gtagger = GeniaTaggerClient()
+        with self.input().open('r') as input_file:
+            with self.output()['np'].open('w') as np_out, self.output()['vp'].open('w') as vp_out, self.output()['pure_np'].open('w') as pure_np_out:
+                for en, ch in pairwise(input_file):
+                    en, ch = en.strip(), ch.strip()
+                    en_tag_info = gtagger.parse(en)
+                    if 'B-VP' == en_tag_info[0][3]:
+                        outfile = vp_out
+                    elif 'B-VP' not in (wdata[3] for wdata in en_tag_info):
+                        outfile = pure_np_out
+                    else:
+                        outfile = np_out
+
+                    print(en, file=outfile)
+                    print(ch, file=outfile)
+                    print(*('/'.join(wdata) for wdata in en_tag_info), file=outfile)
+                    print(file=outfile)
+
+
+class DrEye_Phrases(luigi.ExternalTask):
+
+    def output(self):
+        return luigi.LocalTarget('data/dreye/dreye_phrases.txt')
+
+
+class DrEye_Sents(luigi.ExternalTask):
+
+    def output(self):
+        return luigi.LocalTarget('data/dreye/dreye_sents.txt')
+
+
+
 import goslate
 
 gtranslate = goslate.Goslate(retry_times=30, timeout=60).translate
