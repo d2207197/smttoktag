@@ -7,12 +7,7 @@ from pathlib import Path
 import tables as tb
 from toktagger import ZhTokTagger, KenLM, PyTablesTM
 import concurrent.futures
-
-
-def pairwise(iterable):
-    "s -> (s0,s1), (s2,s3), (s4, s5), ..."
-    a = iter(iterable)
-    return zip(a, a)
+import tools
 
 
 class DrEye_NPVP(luigi.Task):
@@ -32,7 +27,8 @@ class DrEye_NPVP(luigi.Task):
         gtagger = GeniaTaggerClient()
         with self.input().open('r') as input_file:
             with self.output()['np'].open('w') as np_out, self.output()['vp'].open('w') as vp_out, self.output()['pure_np'].open('w') as pure_np_out:
-                for en, ch in pairwise(input_file):
+                for en, ch in tools.group_n_lines(input_file, n=2):
+
                     en, ch = en.strip(), ch.strip()
                     en_tag_info = gtagger.parse(en)
                     if 'B-VP' == en_tag_info[0][3]:
@@ -58,7 +54,6 @@ class DrEye_Sents(luigi.ExternalTask):
 
     def output(self):
         return luigi.LocalTarget('data/dreye/dreye_sents.txt')
-
 
 
 import goslate
@@ -90,7 +85,7 @@ class LTN_Parallel_Sent_Tok(luigi.Task):
         import sys
 
         with self.input().open('r') as input_file, self.output().open('w') as output_file:
-            for en, ch in pairwise(input_file):
+            for en, ch in tools.group_n_lines(input_file, n=2):
                 en, ch = en.strip(), ch.strip()
                 ens = sent_tokenize(en)
                 chs = [sub_ch for sub_ch in ch_sent_tokenize(ch) if sub_ch != '']

@@ -31,3 +31,9 @@ def trace(func):
         print(output, file=sys.stderr)
         return output
     return logify
+
+
+def group_n_lines(iterable, *, n):
+    "s -> (s0,s1), (s2,s3), (s4, s5), ..."
+    a = iter(iterable)
+    return zip(*(a for _ in range(n)))
