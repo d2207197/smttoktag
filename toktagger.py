@@ -73,11 +73,11 @@ class KenLM:
     @tools.methdispatch
     @lru_cache()
     def __getitem__(self, tags):
-        return self.lm.score(tags)
+        return self.lm.score(tags, bos=False, eos=False)
 
     @__getitem__.register(tuple)
     def _(self, tags):
-        return self.lm.score(' '.join(tags))
+        return self.lm.score(' '.join(tags), bos=False, eos=False)
 
     __call__ = __getitem__
     update_wrapper(__call__, __getitem__)
