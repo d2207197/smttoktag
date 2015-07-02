@@ -41,7 +41,7 @@ class PyTablesTM:
 
     "Translation Model from PyTables"
 
-    def __init__(self, h5_file_path, h5_path):
+    def __init__(self, h5_file_path, h5_path='/phrasetable'):
         '''create an object for querying PyTables translation model'''
         import tables as tb
         h5 = tb.open_file(h5_file_path)
@@ -159,7 +159,7 @@ import argparse
 def argparser(args=sys.argv[1:]):
     parser = argparse.ArgumentParser(description='Chinese tokenzier and Part-Of-Speech tagger.')
     parser.add_argument(
-        '--translation-model', '-t', nargs=2, metavar=('H5_FILE_PATH', 'PYTABLE_PATH'), help='Pytables Phrase Table', required=True)
+        '--translation-model', '-t', metavar='H5_FILE_PATH', help='Pytables Phrase Table', required=True)
     parser.add_argument(
         '--language-model', '-l', metavar='KENLM_BLM_PATH', help='KenLM BLM', required=True)
 
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     cmd_options = argparser()
 
     toktagger = ZhTokTagger(
-        tm=PyTablesTM(cmd_options.translation_model[0], cmd_options.translation_model[1]),
+        tm=PyTablesTM(cmd_options.translation_model),
         lm=KenLM(cmd_options.language_model))
 
     for line in fileinput.input(cmd_options.FILE):
