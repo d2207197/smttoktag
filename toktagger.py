@@ -50,6 +50,12 @@ class PyTablesTM:
             self.h5 = tb.open_file(h5_file_path)
             self.pytables = self.h5.get_node(h5_path)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.h5.close()
+
     @lru_cache()
     def __getitem__(self, zh):
         return [
@@ -89,7 +95,7 @@ class KenLM:
 @lru_cache()
 @tools.listify
 def allpartition(seq):
-    for length in range(1,len(seq)+1):
+    for length in range(1, len(seq) + 1):
         yield seq[0:length], seq[length:]
 
 from operator import itemgetter, attrgetter
@@ -173,19 +179,20 @@ def argparser(args=sys.argv[1:]):
 if __name__ == '__main__':
     import fileinput
     cmd_options = argparser()
+    with PyTablesTM(cmd_options.translation_model) as pytables_tm:
 
-    toktagger = ZhTokTagger(
-        tm=PyTablesTM(cmd_options.translation_model),
-        lm=KenLM(cmd_options.language_model))
+        toktagger = ZhTokTagger(
+            tm=pytables_tm,
+            lm=KenLM(cmd_options.language_model))
 
-    for line in fileinput.input(cmd_options.FILE):
-        zh_chars = line.strip()
-        tagger_out = toktagger(zh_chars)
+        for line in fileinput.input(cmd_options.FILE):
+            zh_chars = line.strip()
+            tagger_out = toktagger(zh_chars)
 
-        if cmd_options.format == 'verbose':
-            print(*tagger_out, sep='\t')
-        elif cmd_options.format == 'tab':
-            print(tagger_out[1], tagger_out[2], sep='\t')
-        elif cmd_options.format == '/':
-            print(*('{}/{}'.format(zh, tag)
-                    for zh, tag in zip(tagger_out[1].split(), tagger_out[2].split())))
+            if cmd_options.format == 'verbose':
+                print(*tagger_out, sep='\t')
+            elif cmd_options.format == 'tab':
+                print(tagger_out[1], tagger_out[2], sep='\t')
+            elif cmd_options.format == '/':
+                print(*('{}/{}'.format(zh, tag)
+                        for zh, tag in zip(tagger_out[1].split(), tagger_out[2].split())))
