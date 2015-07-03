@@ -44,8 +44,11 @@ class PyTablesTM:
     def __init__(self, h5_file_path, h5_path='/phrasetable'):
         '''create an object for querying PyTables translation model'''
         import tables as tb
-        h5 = tb.open_file(h5_file_path)
-        self.pytables = h5.get_node(h5_path)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.h5 = tb.open_file(h5_file_path)
+            self.pytables = self.h5.get_node(h5_path)
 
     @lru_cache()
     def __getitem__(self, zh):
