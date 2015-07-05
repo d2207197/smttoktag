@@ -37,3 +37,19 @@ def group_n_lines(iterable, *, n):
     "s -> (s0,s1), (s2,s3), (s4, s5), ..."
     a = iter(iterable)
     return zip(*(a for _ in range(n)))
+
+
+def line_stripper(lines):
+    return map(str.strip, lines)
+
+
+def blank_line_splitter(lines):
+    buffer = []
+    for line in lines:
+        if line == '':
+            yield buffer
+            buffer = []
+        else:
+            buffer.append(line)
+    if buffer:
+        yield buffer
