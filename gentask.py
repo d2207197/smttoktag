@@ -4,8 +4,9 @@
 import tools
 import luigi
 import tables as tb
-
+from subprocess import call
 from functools import wraps
+import shlex
 
 
 def simpletask(handler):
@@ -56,6 +57,47 @@ def untok(inf, outf, *, sep=' '):
     for line in inf:
         line = line.replace(sep, '')
         outf.write(line)
+
+
+def word_diff(task_name, input_task1, input_task2, output_file):
+
+    class task(luigi.Task):
+
+        def requires(self):
+            return (input_task1, input_task2)
+
+        def output(self):
+            return luigi.LocalTarget(output_file)
+
+        def run(self):
+            cmd = shlex.split('dwdiff {} {}'.format(self.input()[0].fn, self.input()[1].fn))
+            with self.output().open('w') as outf:
+                call(cmd, stdout=outf)
+
+    task.__name__ = task_name
+    return task
+
+# cat sbc4 - test.wdiff | gsed - nr
+# '/\[.*\}/{s#[^[]*\[-([^[]*?)+\}[^[]*#\1\n#g; p}' | gsed - r '/^\s*$/d' |
+# tr ' ' '\n' > sbc4 - test.wdiff.errors
+
+
+@simpletask
+def word_diff_errors(inf, outf):
+    import re
+    for line in inf:
+        errors = re.findall(r'\[-.*?-\] \{\+.*?\+\}', line)
+        if errors:
+            print(*errors, sep='\n', end='\n', file=outf)
+
+
+@simpletask
+def word_diff_src_error_words(inf, outf):
+    import re
+    for line in inf:
+        match = re.match(r'\[-(.*)-\]', line)
+        words = match.group(1).split()
+        print(*words, sep='\n', file=outf)
 
 
 def lm(task_name, input_task, lm_file, blm_file, *, input_target_key=None):
@@ -164,13 +206,12 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
                     title='Phrase Table',
                     filters=filters,
                     expectedrows=21626879,
-                    chunkshape=(21626,)
+                    # chunkshape=(21626,)
                 )
                 print(h5file)
                 phrase_data = table.row
                 for (zh, tag), count in translate_count.items():
-                    # t.cols.zh.dtype.itemsize
-                    # t.coldtypes['zh'].itemsize
+
                     data = zh.replace(' ', '').encode('utf8')
                     if len(data) > table.coldtypes['zh'].itemsize:
                         print('zh', len(data))
@@ -204,6 +245,8 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
 def zhtoktag(task_name, input_task, output_file, *, tm, lm):
 
     class task(luigi.Task):
+        parallel_params = luigi.Parameter(default='')
+        parallel_blocksize = luigi.Parameter(default='2k')
 
         def requires(self):
             return {
@@ -218,16 +261,30 @@ def zhtoktag(task_name, input_task, output_file, *, tm, lm):
         def run(self):
             from subprocess import call
             from pathlib import Path
+            import os.path
+            import inspect
 
             import shlex
 
-            venv_activate_path = shlex.quote(str(Path.cwd() / 'venv/bin/activate'))
             tm_path = shlex.quote(self.input()['tm'].fn)
             lm_path = shlex.quote(self.input()['lm']['blm'].fn)
 
-            toktagger_cmd = shlex.quote('source {venv}; ./toktagger.py -t {tm}  -l {lm} -f /'.format(
-                venv=venv_activate_path, tm=tm_path, lm=lm_path))
-            parallel_cmd = 'parallel -k --block-size 2k --pipe {}'.format(toktagger_cmd)
+            home = os.path.expanduser('~')
+            dir_name = Path(inspect.stack()[-1][1]).absolute().parent
+            current_dir_from_home = dir_name.relative_to(home)
+
+            print(current_dir_from_home)
+
+            toktagger_cmd = 'cd {cdir}; source {venv}; ./toktagger.py -t {tm}  -l {lm} -f /'.format(
+                cdir='~/' + shlex.quote(str(current_dir_from_home)),
+                venv=shlex.quote('venv/bin/activate'),
+                tm=tm_path,
+                lm=lm_path)
+            print(toktagger_cmd)
+            parallel_cmd = 'parallel {params} -k --block-size {blocksize} --pipe {cmd}'.format(
+                params=self.parallel_params,
+                blocksize=self.parallel_blocksize,
+                cmd=shlex.quote(toktagger_cmd))
 
             cmd = shlex.split(parallel_cmd)
             print('running... ', parallel_cmd)
