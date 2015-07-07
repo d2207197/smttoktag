@@ -163,17 +163,10 @@ class ZhTokTagger:
         zh_chars = zh_chars.strip()
         zh_chars = tools.zhsent_preprocess(zh_chars)
         zh_chars = tools.zh_and_special_tokenize(zh_chars)
-        # print(zh_chars)
         sents = tools.zhsent_tokenize(zh_chars)
         sents = tuple(sents)
-        # print(sents)
         sents_seginfos = [self._tok_tag(sent)[-1] for sent in sents]
-        # print(sents_seginfos)
         return reduce(lambda a, b: a + b, sents_seginfos)
-        # if out:
-        # else:
-        # return (''.join(zh_chars), ''.join(zh_chars), "Unk", "Unk",
-        # len(zh_chars) * -17, len(zh_chars) * -17, )
 
 
 import argparse
