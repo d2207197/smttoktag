@@ -34,8 +34,6 @@ class fbis_en_genia(luigi.Task):
         return luigi.LocalTarget('data/fbis/fbis.en.genia')
 
     def run(self):
-        import shlex
-        from subprocess import call
         tagger_cmd = 'geniatagger'
 
         parallel_cmd = 'parallel {params} -k --block-size {blocksize} --pipe {cmd}'.format(
@@ -66,6 +64,8 @@ def chunk_BII2IIH(chunk_tags):
             new_chunk_tags.append(chunk_tag)
         else:
             chunk.append(chunk_tag)
+    if chunk:
+        new_chunk_tags.extend(chunk)
     return new_chunk_tags
 
 
@@ -81,7 +81,7 @@ class fbis_en_genia_line_IIH(luigi.Task):
         with self.input().open('r') as in_file, self.output().open('w') as out_file:
             lines = tools.line_stripper(in_file)
             for sublines in tools.blank_line_splitter(lines):
-                sublines = (line.split('\t') for line in sublines)
+                sublines = [line.split('\t') for line in sublines]
                 word, lemma, tag, chunk, _ = zip(*sublines)
                 chunk = chunk_BII2IIH(chunk)
                 print(*word, end='\t', file=out_file)
@@ -89,6 +89,25 @@ class fbis_en_genia_line_IIH(luigi.Task):
                 print(*tag, end='\t', file=out_file)
                 print(*chunk, file=out_file)
 
+
+class fbis_en_patterns(luigi.Task):
+
+    def requires(self):
+        return fbis_en_genia_line_IIH()
+
+    def output(self):
+        return luigi.LocalTarget('data/fbis/fbis.patterns.json')
+
+    def run(self):
+        working_directory = Path('Collocation_syntax/')
+        os.chdir(working_directory)
+        output_folder = Path(self.output().fn + '.d').absolute()
+
+        mapper = './mapper.py'
+        reducer = './reducer.py'
+
+        lmr_cmd = [lmr, '3m', '32', mapper, reducer,  output_folder]
+        call(lmr_cmd)
 
 
 fbis_ch_untok = gentask.untok('fbis_ch_untok', fbis_ch(), 'data/fbis/fbis.ch.untok')
