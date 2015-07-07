@@ -4,9 +4,10 @@
 import tools
 import luigi
 import tables as tb
-from subprocess import call
 from functools import wraps
 import shlex
+from pathlib import Path
+from subprocess import call
 
 
 def simpletask(handler):
@@ -125,13 +126,15 @@ def lm(task_name, input_task, lm_file, blm_file, *, input_target_key=None):
                 input_target_key] if input_target_key else self.input()
 
             with input_file_target.open('r') as inf, self.output()['lm'].open('w') as outf:
-                subprocess.call(
+                call(
                     [lmplz, '-o', order, '--discount_fallback', '0.2', '--vocab_estimate', '105'], stdin=inf, stdout=outf)
 
-            subprocess.call([build_binary, self.output()['lm'].fn, self.output()['blm'].fn])
+            call([build_binary, self.output()['lm'].fn, self.output()['blm'].fn])
 
     task.__name__ = task_name
     return task
+
+from math import log
 
 
 def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None):
@@ -231,7 +234,7 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
                     phrase_data['tag'] = tag.encode('utf8')
 
                     phrase_data['count'] = count
-                    phrase_data['pr'] = count / counts_sum
+                    phrase_data['pr'] = log(count / counts_sum)
                     phrase_data.append()
                     # translate_model[zhs.replace(' ', '')] = (zhs, tags, count / counts_sum)
                 table.flush()

@@ -3,7 +3,7 @@
 
 
 from collections import namedtuple
-from functools import total_ordering
+from functools import total_ordering, reduce
 
 
 @total_ordering
@@ -63,7 +63,7 @@ class PyTablesTM:
                     x['zh_seg'].decode('utf8'),
                     x['tag'].decode('utf8'),
                     x['tag'].decode('utf8'),
-                    log(x['pr']),)
+                    x['pr'],)
 
             for x in self.pytables.where('zh == {}'.format(repr(zh.encode('utf8'))))]
 
@@ -133,31 +133,47 @@ class ZhTokTagger:
         top1_pr_seginfo_of_each_tag = (top1_pr(seginfos_of_same_tag)
                                        for seginfos_of_same_tag in groupby_tag(seginfos))
 
-        return sorted((append_lmpr_tmlmpr(seginfo) for seginfo in top1_pr_seginfo_of_each_tag), key=itemgetter(-1))[-n:]
+        topn_with_lmpr_tmlmpr = sorted(
+            (append_lmpr_tmlmpr(seginfo) for seginfo in top1_pr_seginfo_of_each_tag), key=itemgetter(-1))[-n:]
+        return tuple([seginfo for seginfo, lmpr, tmlmpr in topn_with_lmpr_tmlmpr])
 
     @lru_cache()
     def _tok_tag(self, zh_chars):
         tm_out = []
         for part1, part2 in allpartition(zh_chars):
-            seginfos1 = self.tm[part1]
+            part1_query = ''.join(part1)
+
+            seginfos1 = self.tm[part1_query]
+            # print(part1_query, '->', seginfos1)
+            if not seginfos1:
+                seginfos1 = [SegInfo(part1_query, part1_query, 'Nb', 'Nb', -17 * len(part1))]
+
             if not part2:
                 tm_out.extend(seginfos1)
             else:
                 for seginfo1 in seginfos1:
                     tm_out.extend(
-                        seginfo1 + seginfo2 for seginfo2, lm_pr, tmlm_pr in self._tok_tag(part2))
+                        seginfo1 + seginfo2 for seginfo2 in self._tok_tag(part2))
 
         return self._topN_seginfos(tm_out, 5)
 
     def __call__(self, zh_chars):
         '''>>> zhtagger('今天出去玩')
 ("今天出去玩", "今天 出去 玩", "Nd VA VC", "Nd + VA VC", -22.90191810211992, -8.768468856811523, -31.670386958931445)'''
-        out = self._tok_tag(zh_chars.strip())
-        if out:
-            seginfo, lm_pr, tmlm_pr = out[-1]
-            return tuple(seginfo) + (lm_pr, tmlm_pr)
-        else:
-            return (zh_chars, zh_chars, "", "", -999, -999, -999)
+        zh_chars = zh_chars.strip()
+        zh_chars = tools.zhsent_preprocess(zh_chars)
+        zh_chars = tools.zh_and_special_tokenize(zh_chars)
+        # print(zh_chars)
+        sents = tools.zhsent_tokenize(zh_chars)
+        sents = tuple(sents)
+        # print(sents)
+        sents_seginfos = [self._tok_tag(sent)[-1] for sent in sents]
+        # print(sents_seginfos)
+        return reduce(lambda a, b: a + b, sents_seginfos)
+        # if out:
+        # else:
+        # return (''.join(zh_chars), ''.join(zh_chars), "Unk", "Unk",
+        # len(zh_chars) * -17, len(zh_chars) * -17, )
 
 
 import argparse
@@ -188,6 +204,7 @@ if __name__ == '__main__':
         for line in fileinput.input(cmd_options.FILE):
             zh_chars = line.strip()
             tagger_out = toktagger(zh_chars)
+            # print(tagger_out)
 
             if cmd_options.format == 'verbose':
                 print(*tagger_out, sep='\t')
