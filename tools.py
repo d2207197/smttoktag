@@ -128,4 +128,5 @@ def zhsent_tokenize(words):
         if word in sent_end_word:
             yield tuple(sent)
             sent = []
-    yield tuple(sent)
+    if sent:
+        yield tuple(sent)
