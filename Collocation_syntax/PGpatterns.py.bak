@@ -552,13 +552,13 @@ Pos_map = {'V':'V', 'V-ed':'V', 'N':'N', "N's":'N', 'ADJ':'ADJ', 'ADJER':'ADJ', 
 Pat_poslen = defaultdict(lambda:defaultdict(list))
 Pat_map = {}
 for pos in PGtable:
-    for pg, pats in PGtable[pos].items():
+    for pg, pats in PGtable[pos].iteritems():
         for pat in pats:
             if pat.count(' ')+1 <= 5:
                 try:
                     pos = (set(pat.split()) & Keywordpos).pop()
                     Pat_poslen[pos][(pat.count(' ')+1, pat.split(' ').index(pos))].append(pat.strip())
                 except:
-                    print(pat)
+                    print pat
                 Pat_map[pat] = pg
 

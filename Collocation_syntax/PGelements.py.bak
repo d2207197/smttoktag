@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import re
-
+from itertools import izip
 import genPatterns
 import PGpatterns
 from operator import methodcaller
@@ -58,7 +58,7 @@ Keywordpos = PGpatterns.Keywordpos
 def word2Element(words, lemmas, poss, chunkposs):
     sentlen = len(words)
     pat = []
-    for i, (word, lemma, pos, chunkpos) in enumerate(zip(words, lemmas, poss, chunkposs)):
+    for i, (word, lemma, pos, chunkpos) in enumerate(izip(words, lemmas, poss, chunkposs)):
         element = []
         # The word we focus on.
         if chunkpos[0] != 'O':
@@ -144,15 +144,15 @@ def testing():
     for line in input_lines:
         words, lemmas, poss, chunkposs = line.strip().split('\t', 3)
         words, lemmas = words[0].lower()+words[1:], lemmas[0].lower()+lemmas[1:]
-        words, lemmas = list(map(methodcaller('split'), (words, lemmas)))
+        words, lemmas = map(methodcaller('split'), (words, lemmas))
         if set(words+lemmas) & aklWords:
-            poss, chunkposs = list(map(methodcaller('split'), (poss, chunkposs)))
+            poss, chunkposs = map(methodcaller('split'), (poss, chunkposs))
             # genia = tagger.parse(line)
             # tags = genPatterns.convertBIO2IHO(genia)
             # words = [tag[0] for tag in tags]
             wordElement = word2Element(words, lemmas, poss, chunkposs)
-            for word, element in zip(words, wordElement):
-                print('{}\t{}'.format(word, element))
+            for word, element in izip(words, wordElement):
+                print '{}\t{}'.format(word, element)
         
 
 if __name__ == '__main__':

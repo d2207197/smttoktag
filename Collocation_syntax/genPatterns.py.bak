@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import re
 # import PGpatterns
-from itertools import product
+from itertools import izip, product
 import geniatagger
 # import re_pat_map
 
@@ -106,8 +106,8 @@ def main():
         poss, chunkposs = [tag[2] for tag in tags], [tag[3] for tag in tags]
         # wordElement = re_pat_map.word2Element(tags)
         wordElement = word2Element(tags)
-        for word, lemma, pos, oldchunkpos, chunkpos, element in zip(words, lemmas, poss, oldchunkposs, chunkposs, wordElement):
-            print('{}\t{}\t{}\t{}\t{}\t{}'.format(word, lemma, pos, oldchunkpos, chunkpos, element))
+        for word, lemma, pos, oldchunkpos, chunkpos, element in izip(words, lemmas, poss, oldchunkposs, chunkposs, wordElement):
+            print '{}\t{}\t{}\t{}\t{}\t{}'.format(word, lemma, pos, oldchunkpos, chunkpos, element)
         return
         candidates = []
         for i in range(len(wordElement)):
@@ -116,9 +116,9 @@ def main():
                     if (' '.join(cand)).replace(' _ ', ' ') in PGpatterns.PGPatterns:
                         candidates.append([ (i, j, ' '.join(raw_line[i:j]), (' '.join(cand)).replace(' _ ', ' ')  )])
         if candidates:
-            print(line.strip())
-            print(candidates)
-            print()
+            print line.strip()
+            print candidates
+            print
 
 if __name__ == '__main__':
     main()

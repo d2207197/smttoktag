@@ -42,7 +42,7 @@ Pos_map = {'N':'N', 'V':'V', 'ADJ':'ADJ', 'ADJP':'ADJ'}
 Pat_poslen = defaultdict(lambda:defaultdict(list))
 Pat_map = {}
 for pos in Coltable:
-    for pg, pats in Coltable[pos].items():
+    for pg, pats in Coltable[pos].iteritems():
         for pat in pats:
             pos = (set(pat.split()) & Keywordpos).pop()
             Pat_poslen[pos][(pat.count(' ')+1, pat.split(' ').index(pos))].append(pat.strip())
