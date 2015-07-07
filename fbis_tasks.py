@@ -4,6 +4,11 @@
 
 import gentask
 import luigi
+import tools
+from subprocess import call
+import shlex
+import os
+from sbc4_tm_lm_tasks import sbc4_zh_to_tok_tag_phrasetable, sbc4_tag_lm
 
 
 class fbis_ch(luigi.ExternalTask):
@@ -83,6 +88,13 @@ class fbis_en_genia_line_IIH(luigi.Task):
                 print(*lemma, end='\t', file=out_file)
                 print(*tag, end='\t', file=out_file)
                 print(*chunk, file=out_file)
+
+
+
+fbis_ch_untok = gentask.untok('fbis_ch_untok', fbis_ch(), 'data/fbis/fbis.ch.untok')
+
+fbis_ch_untok_toktag = gentask.zhtoktag(
+    'fbis_ch_untok_toktag', fbis_ch_untok(), 'data/fbis/fbis.ch.untok.tok.txt', tm=sbc4_zh_to_tok_tag_phrasetable(), lm=sbc4_tag_lm())
 
 
 if __name__ == '__main__':
