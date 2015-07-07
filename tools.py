@@ -55,32 +55,6 @@ def blank_line_splitter(lines):
         yield buffer
 
 
-def strQ2B(ustring):
-    rstring = ""
-    for uchar in ustring:
-        inside_code = ord(uchar)
-
-        if inside_code == 0x3000:
-            inside_code = 0x0020
-        # elif 0xff01 <= inside_code <= 0xff0f:
-            # pass
-        else:
-            inside_code -= 0xfee0
-        if inside_code < 0x0020 or inside_code > 0x7e:
-            rstring += uchar
-        else:
-            rstring += chr(inside_code)
-    return rstring
-
-
-def is_number(x):
-    try:
-        float(x)
-    except ValueError:
-        return False
-    else:
-        return True
-
 import re
 CHNUM = '〇一二三四五六七八九十百千萬億兆'
 NUM = '0123456789'
@@ -88,24 +62,50 @@ CHNUMBERS_RE = re.compile(r'[{}]+'.format(CHNUM))
 NUMBERS_RE = re.compile(r'[{}]+'.format(NUM))
 
 
-def number2tag(s):
-    if is_number(s):
-        return '{{CD}}'
-    s = re.sub(CHNUMBERS_RE, '{{CD}}', s)
-    return re.sub(NUMBERS_RE, '{{CD}}', s)
-
-
 import string
 LATIN_LETTERS_RE = re.compile(
     r'\{\{[^ ]+?\}\}|' + r'[-/.﹒~—─=*&_’]*(?:[{letters}]+[-/.﹒~—─=*&_’]*)+'.format(letters=string.ascii_letters))
 
 
-def fw2tag(s):
-    s = re.sub(LATIN_LETTERS_RE, '{{FW}}', s)
-    return s
-
-
 def zhsent_preprocess(s):
+
+    def strQ2B(ustring):
+        "全形拉丁字母、數字、符號轉半形"
+        rstring = ""
+        for uchar in ustring:
+            inside_code = ord(uchar)
+
+            if inside_code == 0x3000:
+                inside_code = 0x0020
+            # elif 0xff01 <= inside_code <= 0xff0f:
+                # pass
+            else:
+                inside_code -= 0xfee0
+            if inside_code < 0x0020 or inside_code > 0x7e:
+                rstring += uchar
+            else:
+                rstring += chr(inside_code)
+        return rstring
+
+    def is_number(x):
+        try:
+            float(x)
+        except ValueError:
+            return False
+        else:
+            return True
+
+    def number2tag(s):
+
+        if is_number(s):
+            return '{{CD}}'
+        s = re.sub(CHNUMBERS_RE, '{{CD}}', s)
+        return re.sub(NUMBERS_RE, '{{CD}}', s)
+
+    def fw2tag(s):
+        s = re.sub(LATIN_LETTERS_RE, '{{FW}}', s)
+        return s
+
     s = strQ2B(s)
     # zh_chars = ' '.join(nltk.word_tokenize(zh_chars))
     s = number2tag(s)
