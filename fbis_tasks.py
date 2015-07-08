@@ -8,6 +8,7 @@ import tools
 from subprocess import call
 import shlex
 import os
+from pathlib import Path
 from sbc4_tm_lm_tasks import sbc4_zh_to_tok_tag_phrasetable, sbc4_tag_lm
 
 
@@ -90,24 +91,52 @@ class fbis_en_genia_line_IIH(luigi.Task):
                 print(*chunk, file=out_file)
 
 
+class pattern_json_reformat_jqscript(luigi.ExternalTask):
+
+    def output(self):
+        return luigi.LocalTarget('pattern.reformat.jq')
+
+
 class fbis_en_patterns(luigi.Task):
 
     def requires(self):
         return fbis_en_genia_line_IIH()
 
     def output(self):
-        return luigi.LocalTarget('data/fbis/fbis.patterns.json')
+        return luigi.LocalTarget('data/fbis/fbis.patterns.json.d')
 
     def run(self):
         working_directory = Path('Collocation_syntax/')
-        os.chdir(working_directory)
-        output_folder = Path(self.output().fn + '.d').absolute()
+        output_folder = Path(self.output().fn).absolute()
 
         mapper = './mapper.py'
         reducer = './reducer.py'
 
-        lmr_cmd = [lmr, '3m', '32', mapper, reducer,  output_folder]
-        call(lmr_cmd)
+        lmr_cmd = ['lmr', '3m', '32', mapper, reducer,  output_folder.as_posix()]
+        with self.input().open('r') as input_data:
+            cwd = Path.cwd()
+            os.chdir(working_directory.as_posix())
+            call(lmr_cmd, stdin=input_data)
+            os.chdir(cwd.as_posix())
+
+
+class fbis_en_patterns_reformat(luigi.Task):
+
+    def requires(self):
+        return {
+            'patterns_json': fbis_en_patterns(),
+            'jq script': pattern_json_reformat_jqscript()
+        }
+
+    def output(self):
+        return luigi.LocalTarget('data/fbis/fbis.patterns.json')
+
+    def run(self):
+        jq_input_files = [fpath.as_posix()
+                          for fpath in Path(self.input()['patterns_json'].fn).glob('reducer-*')]
+        jq_cmd = ['jq', '-s', '-f', self.input()['jq script'].fn] + list(jq_input_files)
+        with self.output().open('w') as outf:
+            call(jq_cmd, stdout=outf)
 
 
 fbis_ch_untok = gentask.untok('fbis_ch_untok', fbis_ch(), 'data/fbis/fbis.ch.untok')
