@@ -8,6 +8,7 @@ import tools
 from subprocess import call
 import shlex
 import os
+from pathlib import Path
 from sbc4_tm_lm_tasks import sbc4_zh_to_tok_tag_phrasetable, sbc4_tag_lm
 
 
@@ -34,8 +35,6 @@ class fbis_en_genia(luigi.Task):
         return luigi.LocalTarget('data/fbis/fbis.en.genia')
 
     def run(self):
-        import shlex
-        from subprocess import call
         tagger_cmd = 'geniatagger'
 
         parallel_cmd = 'parallel {params} -k --block-size {blocksize} --pipe {cmd}'.format(
@@ -66,6 +65,8 @@ def chunk_BII2IIH(chunk_tags):
             new_chunk_tags.append(chunk_tag)
         else:
             chunk.append(chunk_tag)
+    if chunk:
+        new_chunk_tags.extend(chunk)
     return new_chunk_tags
 
 
@@ -81,13 +82,61 @@ class fbis_en_genia_line_IIH(luigi.Task):
         with self.input().open('r') as in_file, self.output().open('w') as out_file:
             lines = tools.line_stripper(in_file)
             for sublines in tools.blank_line_splitter(lines):
-                sublines = (line.split('\t') for line in sublines)
+                sublines = [line.split('\t') for line in sublines]
                 word, lemma, tag, chunk, _ = zip(*sublines)
                 chunk = chunk_BII2IIH(chunk)
                 print(*word, end='\t', file=out_file)
                 print(*lemma, end='\t', file=out_file)
                 print(*tag, end='\t', file=out_file)
                 print(*chunk, file=out_file)
+
+
+class pattern_json_reformat_jqscript(luigi.ExternalTask):
+
+    def output(self):
+        return luigi.LocalTarget('pattern.reformat.jq')
+
+
+class fbis_en_patterns(luigi.Task):
+
+    def requires(self):
+        return fbis_en_genia_line_IIH()
+
+    def output(self):
+        return luigi.LocalTarget('data/fbis/fbis.patterns.json.d')
+
+    def run(self):
+        working_directory = Path('Collocation_syntax/')
+        output_folder = Path(self.output().fn).absolute()
+
+        mapper = './mapper.py'
+        reducer = './reducer.py'
+
+        lmr_cmd = ['lmr', '3m', '32', mapper, reducer,  output_folder.as_posix()]
+        with self.input().open('r') as input_data:
+            cwd = Path.cwd()
+            os.chdir(working_directory.as_posix())
+            call(lmr_cmd, stdin=input_data)
+            os.chdir(cwd.as_posix())
+
+
+class fbis_en_patterns_reformat(luigi.Task):
+
+    def requires(self):
+        return {
+            'patterns_json': fbis_en_patterns(),
+            'jq script': pattern_json_reformat_jqscript()
+        }
+
+    def output(self):
+        return luigi.LocalTarget('data/fbis/fbis.patterns.json')
+
+    def run(self):
+        jq_input_files = [fpath.as_posix()
+                          for fpath in Path(self.input()['patterns_json'].fn).glob('reducer-*')]
+        jq_cmd = ['jq', '-s', '-f', self.input()['jq script'].fn] + list(jq_input_files)
+        with self.output().open('w') as outf:
+            call(jq_cmd, stdout=outf)
 
 
 class fbis_en_ch_prune_long(luigi.Task):
