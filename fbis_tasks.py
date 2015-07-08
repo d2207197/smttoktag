@@ -165,5 +165,31 @@ fbis_ch_untok_toktag = gentask.zhtoktag(
     'fbis_ch_untok_toktag', fbis_ch_untok(), 'data/fbis/fbis.ch.untok.tok.txt', tm=sbc4_zh_to_tok_tag_phrasetable(), lm=sbc4_tag_lm())
 
 
+giza_base_dir = Path('data/fbis/giza/')
+
+
+class fbis_plain2snt(luigi.Task):
+
+    def requires(self):
+        return fbis_en_ch_prune_long()
+
+    def output(self):
+        path_prefix = giza_base_dir / 'fbis'
+        return {file_ext: luigi.LocalTarget(str(path_prefix.with_suffix(file_ext)))
+                for file_ext in ('.ch.vcb', '.en.vcb', '.ch2en.snt', '.en2ch.snt')}
+
+    def run(self):
+        ch_input = self.input()['ch'].fn
+        en_input = self.input()['en'].fn
+        self.output()['.ch.vcb'].makedirs()
+        ch_vcb = self.output()['.ch.vcb'].fn
+        en_vcb = self.output()['.en.vcb'].fn
+        ch2en_snt = self.output()['.ch2en.snt'].fn
+        en2ch_snt = self.output()['.en2ch.snt'].fn
+
+        plain2snt_cmd = ['plain2snt', ch_input, en_input, '-vcb1', ch_vcb,
+                         '-vcb2', en_vcb, '-snt1', ch2en_snt, '-snt2', en2ch_snt]
+        call(plain2snt_cmd)
+
 if __name__ == '__main__':
     luigi.run(local_scheduler=True)
