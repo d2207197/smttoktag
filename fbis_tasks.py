@@ -90,8 +90,27 @@ class fbis_en_genia_line_IIH(luigi.Task):
                 print(*chunk, file=out_file)
 
 
+class fbis_en_ch_prune_long(luigi.Task):
 
-fbis_ch_untok = gentask.untok('fbis_ch_untok', fbis_ch(), 'data/fbis/fbis.ch.untok')
+    def requires(self):
+        return {'en': fbis_en(),
+                'ch': fbis_ch()}
+
+    def output(self):
+        return {'en': luigi.LocalTarget('data/fbis/fbis.en.pruned'),
+                'ch': luigi.LocalTarget('data/fbis/fbis.ch.pruned')}
+
+    def run(self):
+        with self.input()['en'].open('r') as en_infile, self.input()['ch'].open('r') as ch_infile:
+            with self.output()['en'].open('w') as en_outfile, self.output()['ch'].open('w') as ch_outfile:
+                for enline, chline in zip(en_infile, ch_infile):
+                    if len(chline) > 120:
+                        continue
+                    en_outfile.write(enline)
+                    ch_outfile.write(chline)
+
+fbis_ch_untok = gentask.untok(
+    'fbis_ch_untok', fbis_en_ch_prune_long(), 'data/fbis/fbis.ch.untok', input_target_key='ch')
 
 fbis_ch_untok_toktag = gentask.zhtoktag(
     'fbis_ch_untok_toktag', fbis_ch_untok(), 'data/fbis/fbis.ch.untok.tok.txt', tm=sbc4_zh_to_tok_tag_phrasetable(), lm=sbc4_tag_lm())
