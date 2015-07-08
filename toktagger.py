@@ -94,8 +94,9 @@ class KenLM:
 
 @lru_cache()
 @tools.listify
-def allpartition(seq):
-    for length in range(1, len(seq) + 1):
+def allpartition(seq, *, max_length=3 * 5):
+    max_length = min(len(seq), max_length)
+    for length in range(max_length, 1 - 1, -1):
         yield seq[0:length], seq[length:]
 
 from operator import itemgetter, attrgetter
@@ -164,7 +165,6 @@ class ZhTokTagger:
         zh_chars = tools.zhsent_preprocess(zh_chars)
         zh_chars = tools.zh_and_special_tokenize(zh_chars)
         sents = tools.zhsent_tokenize(zh_chars)
-        sents = tuple(sents)
         sents_seginfos = [self._tok_tag(sent)[-1] for sent in sents]
         return reduce(lambda a, b: a + b, sents_seginfos)
 

@@ -105,7 +105,7 @@ def lm(task_name, input_task, lm_file, blm_file, *, input_target_key=None):
 
     class task(luigi.Task):
         kenlm_bin_path = luigi.Parameter(default='kenlm/bin')
-        order = luigi.IntParameter(default=5)
+        order = luigi.IntParameter(default=6)
 
         def requires(self):
             return input_task
