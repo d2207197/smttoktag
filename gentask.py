@@ -13,6 +13,7 @@ from subprocess import call
 def simpletask(handler):
     @wraps(handler)
     def gentask(task_name, input_task, output_file, *args, input_target_key=None, **kwargs):
+        output_file = str(output_file)
 
         class task(luigi.Task):
 
@@ -61,6 +62,7 @@ def untok(inf, outf, *, sep=' '):
 
 
 def word_diff(task_name, input_task1, input_task2, output_file):
+    output_file = str(output_file)
 
     class task(luigi.Task):
 
@@ -102,6 +104,7 @@ def word_diff_src_error_words(inf, outf):
 
 
 def lm(task_name, input_task, lm_file, blm_file, *, input_target_key=None):
+    lm_file, blm_file = str(lm_file), str(blm_file)
 
     class task(luigi.Task):
         kenlm_bin_path = luigi.Parameter(default='kenlm/bin')
@@ -147,6 +150,7 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
     \n
     ' -> output_h5_file.h5
     '''
+    output_h5_file = str(output_h5_file)
 
     class PTable(tb.IsDescription):
         zh = tb.StringCol(200)
@@ -246,6 +250,7 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
 
 
 def zhtoktag(task_name, input_task, output_file, *, tm, lm):
+    output_file = str(output_file)
 
     class task(luigi.Task):
         parallel_params = luigi.Parameter(default='')
