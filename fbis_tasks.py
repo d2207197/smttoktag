@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
 import gentask
 import luigi
 import tools
@@ -13,13 +12,11 @@ from sbc4_tm_lm_tasks import sbc4_zh_to_tok_tag_phrasetable, sbc4_tag_lm
 
 
 class fbis_ch(luigi.ExternalTask):
-
     def output(self):
         return luigi.LocalTarget('data/fbis/FBIS.ch')
 
 
 class fbis_en(luigi.ExternalTask):
-
     def output(self):
         return luigi.LocalTarget('data/fbis/FBIS.en')
 
@@ -45,7 +42,8 @@ class fbis_en_genia(luigi.Task):
         cmd = shlex.split(parallel_cmd)
         print('running... ', parallel_cmd)
 
-        with self.input().open('r') as in_file, self.output().open('w') as out_file:
+        with self.input().open('r') as in_file, self.output().open(
+            'w') as out_file:
             retcode = call(cmd, stdin=in_file, stdout=out_file)
             assert retcode == 0
 
@@ -71,7 +69,6 @@ def chunk_BII2IIH(chunk_tags):
 
 
 class fbis_en_genia_line_IIH(luigi.Task):
-
     def requires(self):
         return fbis_en_genia()
 
@@ -79,7 +76,8 @@ class fbis_en_genia_line_IIH(luigi.Task):
         return luigi.LocalTarget('data/fbis/fbis.en.genia.h')
 
     def run(self):
-        with self.input().open('r') as in_file, self.output().open('w') as out_file:
+        with self.input().open('r') as in_file, self.output().open(
+            'w') as out_file:
             lines = tools.line_stripper(in_file)
             for sublines in tools.blank_line_splitter(lines):
                 sublines = [line.split('\t') for line in sublines]
@@ -92,13 +90,11 @@ class fbis_en_genia_line_IIH(luigi.Task):
 
 
 class pattern_json_reformat_jqscript(luigi.ExternalTask):
-
     def output(self):
         return luigi.LocalTarget('pattern.reformat.jq')
 
 
 class fbis_en_patterns(luigi.Task):
-
     def requires(self):
         return fbis_en_genia_line_IIH()
 
@@ -112,7 +108,8 @@ class fbis_en_patterns(luigi.Task):
         mapper = './mapper.py'
         reducer = './reducer.py'
 
-        lmr_cmd = ['lmr', '3m', '32', mapper, reducer,  output_folder.as_posix()]
+        lmr_cmd = ['lmr', '3m', '32', mapper, reducer,
+                   output_folder.as_posix()]
         with self.input().open('r') as input_data:
             cwd = Path.cwd()
             os.chdir(working_directory.as_posix())
@@ -121,7 +118,6 @@ class fbis_en_patterns(luigi.Task):
 
 
 class fbis_en_patterns_reformat(luigi.Task):
-
     def requires(self):
         return {
             'patterns_json': fbis_en_patterns(),
@@ -132,64 +128,45 @@ class fbis_en_patterns_reformat(luigi.Task):
         return luigi.LocalTarget('data/fbis/fbis.patterns.json')
 
     def run(self):
-        jq_input_files = [fpath.as_posix()
-                          for fpath in Path(self.input()['patterns_json'].fn).glob('reducer-*')]
-        jq_cmd = ['jq', '-s', '-f', self.input()['jq script'].fn] + list(jq_input_files)
+        jq_input_files = [fpath.as_posix() for fpath in Path(
+            self.input()['patterns_json'].fn).glob('reducer-*')]
+        jq_cmd = ['jq', '-s', '-f',
+                  self.input()['jq script'].fn] + list(jq_input_files)
         with self.output().open('w') as outf:
             call(jq_cmd, stdout=outf)
 
 
 class fbis_en_ch_prune_long(luigi.Task):
-
     def requires(self):
-        return {'en': fbis_en(),
-                'ch': fbis_ch()}
+        return {'en': fbis_en(), 'ch': fbis_ch()}
 
     def output(self):
-        return {'en': luigi.LocalTarget('data/fbis/fbis.en.pruned'),
-                'ch': luigi.LocalTarget('data/fbis/fbis.ch.pruned')}
+        return {
+            'en': luigi.LocalTarget('data/fbis/fbis.en.pruned'),
+            'ch': luigi.LocalTarget('data/fbis/fbis.ch.pruned')
+        }
 
     def run(self):
-        with self.input()['en'].open('r') as en_infile, self.input()['ch'].open('r') as ch_infile:
-            with self.output()['en'].open('w') as en_outfile, self.output()['ch'].open('w') as ch_outfile:
+        with self.input()['en'].open(
+            'r') as en_infile, self.input()['ch'].open('r') as ch_infile:
+            with self.output()['en'].open(
+                'w') as en_outfile, self.output()['ch'].open(
+                    'w') as ch_outfile:
                 for enline, chline in zip(en_infile, ch_infile):
                     if len(chline) > 120:
                         continue
                     en_outfile.write(enline)
                     ch_outfile.write(chline)
 
+
 fbis_ch_untok = gentask.untok(
-    'fbis_ch_untok', fbis_en_ch_prune_long(), 'data/fbis/fbis.ch.untok', input_target_key='ch')
+    'fbis_ch_untok', fbis_en_ch_prune_long(), 'data/fbis/fbis.ch.untok',
+    input_target_key='ch')
 
 fbis_ch_untok_toktag = gentask.zhtoktag(
-    'fbis_ch_untok_toktag', fbis_ch_untok(), 'data/fbis/fbis.ch.untok.tok.txt', tm=sbc4_zh_to_tok_tag_phrasetable(), lm=sbc4_tag_lm())
-
-
-giza_base_dir = Path('data/fbis/giza/')
-
-
-class fbis_plain2snt(luigi.Task):
-
-    def requires(self):
-        return fbis_en_ch_prune_long()
-
-    def output(self):
-        path_prefix = giza_base_dir / 'fbis'
-        return {file_ext: luigi.LocalTarget(str(path_prefix.with_suffix(file_ext)))
-                for file_ext in ('.ch.vcb', '.en.vcb', '.ch2en.snt', '.en2ch.snt')}
-
-    def run(self):
-        ch_input = self.input()['ch'].fn
-        en_input = self.input()['en'].fn
-        self.output()['.ch.vcb'].makedirs()
-        ch_vcb = self.output()['.ch.vcb'].fn
-        en_vcb = self.output()['.en.vcb'].fn
-        ch2en_snt = self.output()['.ch2en.snt'].fn
-        en2ch_snt = self.output()['.en2ch.snt'].fn
-
-        plain2snt_cmd = ['plain2snt', ch_input, en_input, '-vcb1', ch_vcb,
-                         '-vcb2', en_vcb, '-snt1', ch2en_snt, '-snt2', en2ch_snt]
-        call(plain2snt_cmd)
+    'fbis_ch_untok_toktag', fbis_ch_untok(), 'data/fbis/fbis.ch.untok.tok.txt',
+    tm=sbc4_zh_to_tok_tag_phrasetable(),
+    lm=sbc4_tag_lm())
 
 if __name__ == '__main__':
     luigi.run(local_scheduler=True)
