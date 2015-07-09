@@ -1,4 +1,6 @@
-/data/
+/src_data/
+/tgt_data/
 /venv/
 /kenlm
 __pycache__/
+.dir-locals.el
