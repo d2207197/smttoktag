@@ -10,26 +10,31 @@ def methdispatch(func):
     @wraps(func)
     def wrapper(*args, **kw):
         return dispatcher.dispatch(args[1].__class__)(*args, **kw)
+
     wrapper.register = dispatcher.register
     return wrapper
 
 
 def listify(func):
     "Decorator to convert generator output to a list"
+
     @wraps(func)
     def listify(*args, **kw):
         return list(func(*args, **kw))
+
     return listify
 
 
 def trace(func):
     "Decorator for logging input and output of function"
+
     @wraps(func)
     def logify(*args, **kw):
         print(args, kw, end=' ->>>\t', file=sys.stderr)
         output = func(*args, **kw)
         print(output, file=sys.stderr)
         return output
+
     return logify
 
 
@@ -56,19 +61,19 @@ def blank_line_splitter(lines):
 
 
 import re
-CHNUM = '〇一二三四五六七八九十百千萬億兆'
+CHNUM = '〇一二兩三四五六七八九十百千萬億兆'
 NUM = '0123456789'
 CHNUMBERS_RE = re.compile(r'[{}]+'.format(CHNUM))
 NUMBERS_RE = re.compile(r'[{}]+'.format(NUM))
 
-
 import string
 LATIN_LETTERS_RE = re.compile(
-    r'\{\{[^ ]+?\}\}|' + r'[-/.﹒~—─=*&_’]*(?:[{letters}]+[-/.﹒~—─=*&_’]*)+'.format(letters=string.ascii_letters))
+    r'\{\{[^ ]+?\}\}|' +
+    r'[-/.﹒~—─=*&_’]*(?:[{letters}]+[-/.﹒~—─=*&_’]*)+'.format(
+        letters=string.ascii_letters))
 
 
 def zhsent_preprocess(s):
-
     def strQ2B(ustring):
         "全形拉丁字母、數字、符號轉半形"
         rstring = ""
@@ -78,7 +83,7 @@ def zhsent_preprocess(s):
             if inside_code == 0x3000:
                 inside_code = 0x0020
             # elif 0xff01 <= inside_code <= 0xff0f:
-                # pass
+            # pass
             else:
                 inside_code -= 0xfee0
             if inside_code < 0x0020 or inside_code > 0x7e:

@@ -12,11 +12,11 @@ from subprocess import call
 
 def simpletask(handler):
     @wraps(handler)
-    def gentask(task_name, input_task, output_file, *args, input_target_key=None, **kwargs):
+    def gentask(task_name, input_task, output_file, *args,
+                input_target_key=None, **kwargs):
         output_file = str(output_file)
 
         class task(luigi.Task):
-
             def requires(self):
                 return input_task
 
@@ -25,15 +25,34 @@ def simpletask(handler):
 
             def run(self):
                 input_file_target = (
-                    self.input()[input_target_key] if input_target_key else self.input())
+                    self.input()[input_target_key]
+                    if input_target_key else self.input()
+                )
 
-                with input_file_target.open('r') as inf, self.output().open('w') as outf:
+                with input_file_target.open('r') as inf, self.output().open(
+                    'w') as outf:
                     handler(inf, outf, *args, **kwargs)
 
         task.__name__ = task_name
         return task
 
     return gentask
+
+
+import contextlib
+
+
+@simpletask
+def transformat_tab2lines(inf, outf):
+    last_len_cols = None
+    for line in inf:
+        cols = line.strip().split('\t')
+        if last_len_cols:
+            assert len(cols) == last_len_cols
+
+        last_len_cols = len(cols)
+        with contextlib.redirect_stdout(outf):
+            print(*cols, sep='\n', end='\n\n')
 
 
 @simpletask
@@ -55,17 +74,129 @@ def slice_lines_grouped_by_n(inf, outf, *, n, s):
 
 
 @simpletask
+def remove_slashtag(inf, outf):
+    for line in inf:
+        words = line.strip().split()
+        words = (word.rsplit('/')[0] for word in words)
+        print(*words, file=outf)
+
+
+def parallel_lines_merge(task_name, input_task1, input_task2, output_path):
+    class task(luigi.Task):
+        def requires(self):
+            return {'in1': input_task1, 'in2': input_task2}
+
+        def output(self):
+            return luigi.LocalTarget(str(output_path))
+
+        def run(self):
+            with self.input()['in1'].open(
+                'r') as in1f, self.input()['in2'].open('r') as in2f:
+                with self.output().open('w') as outf:
+                    for line1, line2 in zip(in1f, in2f):
+                        outf.write(line1)
+                        outf.write(line2)
+                        outf.write('\n')
+
+    task.__name__ = task_name
+    return task
+
+
+def truecase(task_name, input_task, train_task, output_path):
+    class train(luigi.Task):
+        def requires(self):
+            return train_task
+
+        def output(self):
+            return luigi.LocalTarget(self.input().fn + '.truecase_model')
+
+        def run(self):
+            call(['train-truecaser.perl', '--model', self.output().fn,
+                  '--corpus', self.input().fn])
+
+    class truecase(luigi.Task):
+        def requires(self):
+            return {'corpus': input_task, 'model': train()}
+
+        def output(self):
+            return luigi.LocalTarget(str(output_path))
+
+        def run(self):
+            with self.input()['corpus'].open('r') as inf, self.output().open(
+                'w') as outf:
+                call(['truecase.perl', '--model', self.input()['model'].fn],
+                     stdin=inf,
+                     stdout=outf)
+
+    truecase.__name__ = task_name
+    return truecase
+
+
+@simpletask
 def untok(inf, outf, *, sep=' '):
     for line in inf:
         line = line.replace(sep, '')
         outf.write(line)
 
 
+@simpletask
+def geniatagger(inf, outf):
+    geniatagger_cmd = ['geniatagger', '-nt']
+    call(geniatagger_cmd, stdin=inf, stdout=outf)
+
+
+@simpletask
+def word_tokenize(inf, outf):
+    import nltk
+    for line in inf:
+        print(*nltk.word_tokenize(line), file=outf)
+
+
+@simpletask
+def unidecode(inf, outf):
+    from unidecode import unidecode
+    for line in inf:
+        decoded_line = unidecode(line.strip().replace(' ', ' '))
+        print(decoded_line, file=outf)
+
+
+def localtarget_task(path):
+    class task(luigi.ExternalTask):
+        def output(self):
+            return luigi.LocalTarget(path)
+
+    task.__name__ = path  #path.replace('/', '_').replace(' ', '_')
+    return task
+
+
+class tab_split_file(luigi.Task):
+    inputf = luigi.Parameter()
+    outputf1 = luigi.Parameter()
+    outputf2 = luigi.Parameter()
+
+    def requires(self):
+        return localtarget_task(self.inputf)()
+
+    def output(self):
+        return {
+            'out1': luigi.LocalTarget(self.outputf1),
+            'out2': luigi.LocalTarget(self.outputf2)
+        }
+
+    def run(self):
+        with self.input().open('r') as inf:
+            with self.output()['out1'].open(
+                'w') as outf1, self.output()['out2'].open('w') as outf2:
+                for line in inf:
+                    left, right = line.strip().split('\t', 1)
+                    print(left, file=outf1)
+                    print(right, file=outf2)
+
+
 def word_diff(task_name, input_task1, input_task2, output_file):
     output_file = str(output_file)
 
     class task(luigi.Task):
-
         def requires(self):
             return (input_task1, input_task2)
 
@@ -73,7 +204,8 @@ def word_diff(task_name, input_task1, input_task2, output_file):
             return luigi.LocalTarget(output_file)
 
         def run(self):
-            cmd = shlex.split('dwdiff {} {}'.format(self.input()[0].fn, self.input()[1].fn))
+            cmd = shlex.split('dwdiff {} {}'.format(self.input()[0].fn,
+                                                    self.input()[1].fn))
             with self.output().open('w') as outf:
                 call(cmd, stdout=outf)
 
@@ -121,26 +253,35 @@ def lm(task_name, input_task, lm_file, blm_file, *, input_target_key=None):
 
         def run(self):
             lmplz = str(Path(self.kenlm_bin_path) / Path('lmplz'))
-            build_binary = str(Path(self.kenlm_bin_path) / Path('build_binary'))
+            build_binary = str(Path(self.kenlm_bin_path) /
+                               Path('build_binary'))
 
             order = str(self.order)
 
             input_file_target = self.input()[
-                input_target_key] if input_target_key else self.input()
+                input_target_key
+            ] if input_target_key else self.input()
 
-            with input_file_target.open('r') as inf, self.output()['lm'].open('w') as outf:
+            with input_file_target.open('r') as inf, self.output()['lm'].open(
+                'w') as outf:
                 call(
-                    [lmplz, '-o', order, '--discount_fallback', '0.2', '--vocab_estimate', '105'], stdin=inf, stdout=outf)
+                    [lmplz, '-o', order, '--discount_fallback', '0.2',
+                     '--vocab_estimate', '105'],
+                    stdin=inf,
+                    stdout=outf)
 
-            call([build_binary, self.output()['lm'].fn, self.output()['blm'].fn])
+            call([build_binary, self.output()['lm'].fn,
+                  self.output()['blm'].fn])
 
     task.__name__ = task_name
     return task
 
+
 from math import log
 
 
-def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None):
+def phrasetable(task_name, input_task, output_h5_file, *,
+                input_target_key=None):
     '''
     'ch ch ch\n
     tag tag tag\n
@@ -160,7 +301,6 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
         pr = tb.Float64Col()
 
     class task(luigi.Task):
-
         def requires(self):
             return input_task
 
@@ -181,7 +321,8 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
 
         @staticmethod
         def ngram_pairs_from_lines(lines):
-            for i, (zh, tag, _) in enumerate(tools.group_n_lines(lines, n=3), 1):
+            for i, (zh, tag, _) in enumerate(tools.group_n_lines(lines,
+                                                                 n=3), 1):
                 zh, tag = zh.split(), tag.split()
                 if i % 100000 == 0:
                     print('{:,}'.format(i))  # show progress
@@ -192,7 +333,8 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
             from collections import Counter
             translate_count = Counter()
             print('Counting ngrams...')
-            with self.input().open('r') as inf:  # , self.output().open('w') as outf:
+            with self.input().open(
+                'r') as inf:  # , self.output().open('w') as outf:
                 translate_count.update(task.ngram_pairs_from_lines(inf))
 
             # print(translate_count.most_common(5))
@@ -202,7 +344,9 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
 
             print('Writing translation prob to `{}`'.format(self.output().fn))
 
-            with tb.open_file(self.output().fn, mode='w', title='Phrase Table') as h5file:
+            with tb.open_file(self.output().fn,
+                              mode='w',
+                              title='Phrase Table') as h5file:
 
                 filters = tb.Filters(complevel=9, complib='blosc')
                 # group = h5file.create_group("/", 'ptable', 'Phrase Table')
@@ -212,8 +356,7 @@ def phrasetable(task_name, input_task, output_h5_file, *, input_target_key=None)
                     description=PTable,
                     title='Phrase Table',
                     filters=filters,
-                    expectedrows=21626879,
-                    # chunkshape=(21626,)
+                    expectedrows=21626879,  # chunkshape=(21626,)
                 )
                 print(h5file)
                 phrase_data = table.row
@@ -257,11 +400,7 @@ def zhtoktag(task_name, input_task, output_file, *, tm, lm):
         parallel_blocksize = luigi.Parameter(default='2k')
 
         def requires(self):
-            return {
-                'input': input_task,
-                'tm': tm,
-                'lm': lm,
-            }
+            return {'input': input_task, 'tm': tm, 'lm': lm, }
 
         def output(self):
             return luigi.LocalTarget(output_file)
@@ -297,9 +436,9 @@ def zhtoktag(task_name, input_task, output_file, *, tm, lm):
             cmd = shlex.split(parallel_cmd)
             print('running... ', parallel_cmd)
 
-            with self.input()['input'].open('r') as in_file, self.output().open('w') as out_file:
-                retcode = call(
-                    cmd, stdin=in_file, stdout=out_file)
+            with self.input()['input'].open(
+                'r') as in_file, self.output().open('w') as out_file:
+                retcode = call(cmd, stdin=in_file, stdout=out_file)
             assert retcode == 0
 
     task.__name__ = task_name
