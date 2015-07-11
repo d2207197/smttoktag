@@ -6,8 +6,11 @@ import luigi
 import gentask
 import gentask_giza
 from pathlib import Path
+import sys
 from sbc4_tm_lm_tasks import sbc4_tok_tag_tm, sbc4_tag_lm
-
+from collections import Counter, defaultdict
+from operator import itemgetter
+from functools import reduce
 orig_ench = gentask.localtarget_task('src_data/medal.ench.txt')
 
 target_dir = Path('tgt_data/medal')
@@ -60,6 +63,10 @@ class phrasetable(luigi.ExternalTask):
 
 import time
 
+from collections import namedtuple
+
+PhraseInfo = namedtuple('PhraseInfo', ['ch', 'aligns', 'scores'])
+
 
 class MosesPhraseTable(dict):
     def __init__(self, phrasetable_file):
@@ -68,17 +75,21 @@ class MosesPhraseTable(dict):
             # inv_phrase_prob, inv_lex_w, dir_phrase_prob, dir_lex_w
             inv_phrase_prob, inv_lex_w, dir_phrase_prob, dir_lex_w = map(
                 float, scores.strip().split())
-            aligns = (align.split('-') for align in aligns.strip().split())
-            aligns = {int(en_pos): int(ch_pos) for en_pos, ch_pos in aligns}
-            self[en.strip()] = {
-                'ch': ch.strip().split(),
-                'aligns': aligns,
-                'scrose': {
-                    'inv phrase prob': inv_phrase_prob, 'inv lex weight':
-                    inv_lex_w, 'dir phrase prob': dir_phrase_prob,
+            aligns = (map(int, align.split('-'))
+                      for align in aligns.strip().split())
+            aligns_dict = defaultdict(list)
+            for en_pos, ch_pos in aligns:
+                aligns_dict[en_pos].append(ch_pos)
+
+            self[en.strip()] = PhraseInfo(
+                ch=ch.strip().split(),
+                aligns=aligns_dict,
+                scores={
+                    'inv phrase prob': inv_phrase_prob,
+                    'inv lex weight': inv_lex_w,
+                    'dir phrase prob': dir_phrase_prob,
                     'dir lex weight': dir_lex_w
-                }
-            }
+                })
             # print(self[en.strip()])
             # time.sleep(0.5)
 
@@ -110,61 +121,90 @@ class spg(luigi.Task):
         with gzip.open(self.input()['phrase table'].fn,
                        mode='rt',
                        encoding='utf8') as ptablef:
-            pt = MosesPhraseTable(ptablef)
+            phrasetable = MosesPhraseTable(ptablef)
         import json
         with self.input()['en patterns'].open('r') as patternsf:
             patterns = json.load(patternsf)
 
         for pattern in patterns:
             ch_patterns = []
-            for instance in pattern['instances']:
-                if instance in pt:
-                    ch_pattern = {}
+            for instance_info in pattern['instances']:
 
-                    instance_word_pos = {
-                        word: pos
-                        for pos, word in enumerate(instance.split())
-                    }
-                    if 0 not in pt[instance]['aligns']:
-                        warnings.warn(
-                            'no anchor verb: {}'.format(pt[instance]))
-                        continue
-                    ch_pos = pt[instance]['aligns'][0]
-                    ch_verb = pt[instance]['ch'][ch_pos]
-                    ch_pattern[ch_pos] = ch_verb
-                    pattern_syms = pattern['pattern'].split()
-                    for pattern_sym in pattern_syms[1:]:
-                        if pattern_sym == 'sth':
-                            pass
-                        elif pattern_sym == 'adjp':
-                            pass
-                        elif pattern_sym == 'advp':
-                            pass
-                        elif pattern_sym == 'inf':
-                            pass
-                        elif pattern_sym == 'wh':
-                            pass
-                        elif pattern_sym == 'doing':
-                            pass
-                        else:
-                            en_pos = instance_word_pos[pattern_sym]
+                # instance_info = {
+                #    "instance": "writing an apology",
+                #    "tag": {
+                #        "0": "V",
+                #        "2": "sth"
+                #    }
+                # }
 
-                            if en_pos not in pt[instance]['aligns']:
-                                warnings.warn('{} not aligned: {}'.format(
-                                    pattern_sym, pt[instance]))
-                                break
+                instance = instance_info['instance']
+                en_tags = {int(k): v for k, v in instance_info['tag'].items()}
 
-                            ch_pos = pt[instance]['aligns'][en_pos]
+                if instance not in phrasetable:
+                    warnings.warn(
+                        'instance not in phrase-table: {}'.format(instance))
+                    continue
 
-                            ch_word = pt[instance]['ch'][ch_pos]
-                            ch_pattern[ch_pos] = ch_word
+                phrase_info = phrasetable[instance]
+
+                if 0 not in phrase_info.aligns:
+                    warnings.warn(
+                        'no anchor verb: {}'.format(phrasetable[instance]))
+                    continue
+
+                ch_tags = [
+                    (phrase_info.aligns[en_pos], tag)
+                    for en_pos, tag in en_tags.items()
+                    if en_pos in phrase_info.aligns
+                ]
+
+                ch_pattern = []
+                important_tags = frozenset(['V', 'sth', 'adjp', 'advp', 'inf',
+                                            'wh', 'doing'])
+                important_pos = set()
+                for ch_poss, tag in sorted(ch_tags, key=itemgetter(0)):
+                    if any(ch_pos in important_pos for ch_pos in ch_poss):
+                        break
+
+                    if tag in important_tags:
+                        important_pos.update(ch_poss)
+
+                    if tag == 'V':
+                        for ch_pos in ch_poss:
+                            ch_pattern.append(
+                                (ch_pos,
+                                 '{}:{}'.format(phrase_info.ch[ch_pos], tag)))
+                    elif tag in important_tags:
+                        for ch_pos in ch_poss:
+                            ch_pattern.append((ch_pos, tag))
 
                     else:
-                        ch_patterns.append(
-                            [ch_word
-                             for pos, ch_word in sorted(ch_pattern.items())])
+                        for ch_pos in ch_poss:
+                            ch_pattern.append(
+                                (ch_pos,
+                                 '{}:{}'.format(phrase_info.ch[ch_pos], tag)))
 
-            pattern['ch_patterns'] = ch_patterns
+                else:
+                    ch_pattern = list(map(itemgetter(1),
+                                          sorted(ch_pattern,
+                                                 key=itemgetter(0))))
+
+                    #  [ 'X', 'X', 'A', 'B', 'B', 'B', 'X' ] ->  ['X', 'A', 'B', 'X']  # merge continuous tag
+                    ch_pattern = reduce(lambda x, z: x + [z] if x[-1] != z else
+                                        x, ch_pattern[1:], ch_pattern[:1])
+                    ch_patterns.append(
+                        ' '.join(ch_pattern)
+                    )  #+ '\n' + repr(instance) + '\n' +
+                    # repr(phrase_info) + '\n' + repr(en_tags))
+
+            ch_patterns_cnter = Counter(ch_patterns)
+            pattern[
+                'ch_patterns'
+            ] = [{"pattern": ch_pattern,
+                  "cnt": cnt}
+                 for ch_pattern, cnt in ch_patterns_cnter.most_common()]
+
         with self.output().open('w') as outf:
             json.dump(patterns, outf)
 
@@ -174,6 +214,7 @@ if __name__ == '__main__':
     print(luigi.configuration.get_config())
     sch = luigi.scheduler.CentralPlannerScheduler()
     w = luigi.worker.Worker(scheduler=sch)
+    # w.add(en_patterns_pretty())
     w.add(spg())
 
     w.run()
