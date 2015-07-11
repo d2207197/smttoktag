@@ -17,8 +17,8 @@ pv 100000citeseerx.sents.tagged.h | lmr 5m 4 'python mapper.py' 'python reducer.
 pv citeseerx.sents.tagged.h | lmr 100m 40 'python mapper.py' 'python reducer.py' output
 """
 
-class OrderedDefaultDict(OrderedDict):
 
+class OrderedDefaultDict(OrderedDict):
     def __init__(self, default_factory=None, *args, **kwargs):
         super(OrderedDefaultDict, self).__init__(*args, **kwargs)
         self.default_factory = default_factory
@@ -29,32 +29,35 @@ class OrderedDefaultDict(OrderedDict):
         val = self[key] = self.default_factory()
         return val
 
-class WordPat(Counter):
 
+class WordPat(Counter):
     def __init__(self, dev_thresh, minCount):
-        self.default_factory = Counter # Collocates
+        self.default_factory = Counter  # Collocates
         self.dev_thresh = dev_thresh
         self.minCount = minCount
 
     def __repr__(self):
         #tail = ', ...' if len(self) > 3 else ''
         items = ', \n    '.join(map(str, iter(self.items())))
-        return '{}(freq = {}, avg_freq = {}, dev = {}, \n \n)'.format(self.__class__.__name__, self.freq, self.avg_freq, self.dev, items)
+        return '{}(freq = {}, avg_freq = {}, dev = {}, \n \n)'.format(
+            self.__class__.__name__, self.freq, self.avg_freq, self.dev, items)
 
     def calc_metrics(self):
         self.freq = sum(self.values())
         len_self = len(self)
-        self.avg_freq = self.freq/len_self if len_self else 0.0
-        self.dev = sqrt(sum(( xfreq-self.avg_freq)**2 for xfreq in list(self.values()) )/len_self) if len_self else 0.0
+        self.avg_freq = self.freq / len_self if len_self else 0.0
+        self.dev = sqrt(sum(
+            (xfreq - self.avg_freq) ** 2
+            for xfreq in list(self.values())) / len_self) if len_self else 0.0
 
     def gen_goodpat(self):
         if self.freq == 0 or self.dev == 0:
             return
         good_pat = []
         for pat in self:
-            if (self[pat]-self.avg_freq)/self.dev > self.dev_thresh:
+            if (self[pat] - self.avg_freq) / self.dev > self.dev_thresh:
                 good_pat.append((pat, self[pat]))
-        for pat, count in sorted(good_pat, key=lambda x:x[1], reverse=True):
+        for pat, count in sorted(good_pat, key=lambda x: x[1], reverse=True):
             if count > self.minCount:
                 yield pat, count
 
@@ -63,17 +66,23 @@ class WordPat(Counter):
             return sorted(self.gen_goodpat(), key=itemgetter(1), reverse=True)
         return nlargest(n, self.gen_goodpat(), key=itemgetter(1))
 
-def line2structed(line):
-    wordpos, pat, iocs, example, cnt = line.rstrip().split('\t', 4)
-    return PatData(wordpos, pat, iocs, example, int(cnt))
 
-PatData = namedtuple('PatData', ['wordpos', 'pat', 'iocs', 'example', 'cnt'])
+def line2structed(line):
+    wordpos, pat, iocs, example, instance_sym, cnt = line.rstrip().split('\t',
+                                                                         5)
+    return PatData(wordpos, pat, iocs, example, eval(instance_sym), int(cnt))
+
+
+PatData = namedtuple('PatData', ['wordpos', 'pat', 'iocs', 'example',
+                                 'instance_sym', 'cnt'])
+
 
 def reducer():
     table = {}
     lines = fileinput.input()
     structed_lines = map(line2structed, lines)
-    for wordpos, wordposdatas in groupby(structed_lines, key=attrgetter('wordpos')):
+    for wordpos, wordposdatas in groupby(structed_lines,
+                                         key=attrgetter('wordpos')):
         patterns = WordPat(1, 10)
         # wordpos_cnt, patterns = 0, WordPat(0, 0)
         pat_dict = defaultdict(list)
@@ -86,25 +95,36 @@ def reducer():
             if not isgoodpat:
                 isgoodpat = True
                 # print wordpos, wordpos_cnt
-                table[wordpos] = [patterns.freq, patterns.avg_freq, patterns.dev]
+                table[wordpos] = [patterns.freq, patterns.avg_freq,
+                                  patterns.dev]
             iocss = Counter()
             # iocss = WordPat(1, 10)
             # iocss = WordPat(0, 0)
             iocs_dict = defaultdict(list)
-            for patdata in pat_dict[pat]:                
+            for patdata in pat_dict[pat]:
                 iocss[patdata.iocs] += patdata.cnt
                 iocs_dict[patdata.iocs].append(patdata)
             # iocss.calc_metrics()
             example_list = []
             # print '\t', pat, pat_cnt
             # iocss.calc_metrics()
-            for iocs, iocs_cnt in iocss.most_common()[:3]:
-                best_example_cnter = Counter()
-                for iocsdata in iocs_dict[iocs]:
-                    best_example_cnter[iocsdata.example] += iocsdata.cnt                
-                best_example, example_cnt = best_example_cnter.most_common(1)[0]
-                example_list.append([best_example, iocs_cnt, example_cnt])
-                # print '\t\t', best_example, iocs_cnt, example_cnt
+            # print('<IOCSS>', iocss)
+
+            # for iocs, iocs_cnt in iocss.most_common():
+            #     best_example_cnter = Counter()
+            #     for iocsdata in iocs_dict[iocs]:
+            #         best_example_cnter[iocsdata.example] += iocsdata.cnt
+            #     best_example, example_cnt = best_example_cnter.most_common(1)[0
+            #                                                                   ]
+            #     example_list.append([best_example, iocs_cnt, example_cnt])
+
+            for iocs, patdatas in iocs_dict.items():
+                for patdata in patdatas:
+
+                    example_list.append([patdata.example, patdata.cnt,
+                                         patdata.instance_sym])
+
+            # print '\t\t', best_example, iocs_cnt, example_cnt
             table[wordpos].append([pat, pat_cnt, example_list])
         """
         patInstances = [(pat, list(instances)) for pat, instances in groupby(wordposdatas, key=attrgetter('pat'))]
@@ -143,6 +163,6 @@ def reducer():
     print(json.dumps(table))
     fileinput.close()
 
+
 if __name__ == '__main__':
     reducer()
-

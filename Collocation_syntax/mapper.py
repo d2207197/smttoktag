@@ -12,7 +12,7 @@ import PGelements
 import Colpatterns
 import Colelements
 import genPatterns
-
+import json
 """ Linux cmd:
 pv 100000citeseerx.sents.tagged.h | lmr 5m 4 'python pgp_mapper.py' 'python pgp_reducer.py' pgp_test
 pv citeseerx.sents.tagged.h | lmr 100m 40 'python pgp_mapper.py' 'python pgp_reducer.py' pgp_
@@ -31,7 +31,6 @@ aklWords = set(line.rstrip() for line in open('writeaway_word.txt'))
 
 
 def pat_product(word_elements, pos, elem_i, prelen, aftlen, keywordPos):
-
     def add_element(elements, prods, prod_lens, isignore=False):
         for k, prod in enumerate(prods):
             if prod_lens[k] != 0:
@@ -59,10 +58,15 @@ def pat_product(word_elements, pos, elem_i, prelen, aftlen, keywordPos):
                     add_element(elements, prods, prod_lens, isignore=True)
                 else:
                     tmp_prods = [
-                        prod for k, prod in enumerate(deepcopy(prods)) if prod_lens[k] != 0]
-                    tmp_prod_lens = [prod_len for prod_len in deepcopy(prod_lens) if prod_len != 0]
+                        prod for k, prod in enumerate(deepcopy(prods))
+                        if prod_lens[k] != 0
+                    ]
+                    tmp_prod_lens = [prod_len
+                                     for prod_len in deepcopy(prod_lens)
+                                     if prod_len != 0]
                     add_element(['_'], tmp_prods, tmp_prod_lens, isignore=True)
-                    nonignore = [e for e in elements if e not in keywordPos and e != '_']
+                    nonignore = [e for e in elements
+                                 if e not in keywordPos and e != '_']
                     add_element(nonignore, prods, prod_lens, isignore=False)
                     prods.extend(tmp_prods)
                     prod_lens.extend(tmp_prod_lens)
@@ -93,9 +97,9 @@ def gen_candiate(word_elements, words, lemmas, keywordpos, pat_poslen):
             pos = pos.pop()
             # for (pat_len, pos_index), pats in Colpatterns.ColPat_poslen[pos].iteritems():
             for (pat_len, pos_index), pats in pat_poslen[pos].items():
-                for cand in pat_product(word_elements, pos, elem_i, pos_index, pat_len - pos_index - 1, keywordpos):
+                for cand in pat_product(word_elements, pos, elem_i, pos_index,
+                                        pat_len - pos_index - 1, keywordpos):
                     # print pat_len, pos_index
-                    # print cand
                     # print
                     pat_cands, pat_indexs = [], []
                     for i, w in enumerate(cand):
@@ -104,11 +108,14 @@ def gen_candiate(word_elements, words, lemmas, keywordpos, pat_poslen):
                             pat_indexs.append(i)
                     # if len(pat_cands) == pat_len and parsleyPatterns.isPattern(' '.join(pat_cands)):
                     # pat_cands, pat_indexs = remove_prep_of(pat_cands, pat_indexs)
-                    if len(pat_cands) == pat_len and ' '.join(pat_cands) in pats:
+                    if len(pat_cands) == pat_len and ' '.join(
+                        pat_cands) in pats:
                         pos_i = pat_indexs[pos_index]
                         for i, index in enumerate(pat_indexs):
                             pat_indexs[i] = index + elem_i - pos_i
-                        yield pos, elem_i, pat_cands, pat_indexs
+                        # print('<CAND>', cand, end='')
+                        # print('-> ', pos, elem_i, pat_cands, pat_indexs)
+                        yield pos, elem_i, pat_cands, pat_indexs  # N 6 ['by', 'N'] [4, 6]
 
 
 def get_prev_aftr_word(words, chunkposs, index):
@@ -175,35 +182,46 @@ def mapper():
             print(line, file=sys.stderr)
             sys.exit(1)
 
-        words, lemmas = words[0].lower() + words[1:], lemmas[0].lower() + lemmas[1:]
+        words, lemmas = words[0].lower() + words[1:], lemmas[0].lower(
+        ) + lemmas[1:]
         words, lemmas = list(map(methodcaller('split'), (words, lemmas)))
         if set(words + lemmas) & aklWords:
-            poss, chunkposs = list(map(methodcaller('split'), (poss, chunkposs)))
+            poss, chunkposs = list(map(methodcaller('split'),
+                                       (poss, chunkposs)))
             if chose == 'combine':
-                wordElement = PGelements.word2Element(words, lemmas, poss, chunkposs)
+                wordElement = PGelements.word2Element(words, lemmas, poss,
+                                                      chunkposs)
                 keywordpos, pat_poslen = PGpatterns.Keywordpos, PGpatterns.Pat_poslen
                 gra_pat_dict = defaultdict(list)
                 pos_map, gra_pat_map = PGpatterns.Pos_map, PGpatterns.Pat_map
-                for pos, elem_i, cand, index in gen_candiate(wordElement, words, lemmas, keywordpos, pat_poslen):
+                for pos, elem_i, cand, index in gen_candiate(
+                    wordElement, words, lemmas, keywordpos, pat_poslen):
                     gra_pat_dict[(pos_map[pos], elem_i)].append((cand, index))
-                wordElement = Colelements.word2Element(words, lemmas, poss, chunkposs)
+                wordElement = Colelements.word2Element(words, lemmas, poss,
+                                                       chunkposs)
                 keywordpos, pat_poslen = Colpatterns.Keywordpos, Colpatterns.Pat_poslen
                 col_pat_dict = defaultdict(list)
                 pos_map, pat_map = Colpatterns.Pos_map, Colpatterns.Pat_map
-                for pos, elem_i, cand, index in gen_candiate(wordElement, words, lemmas, keywordpos, pat_poslen):
+                for pos, elem_i, cand, index in gen_candiate(
+                    wordElement, words, lemmas, keywordpos, pat_poslen):
                     col_pat_dict[(pos_map[pos], elem_i)].append((cand, index))
                 for pos, elem_i in gra_pat_dict:
                     for gra_cand, gra_index in gra_pat_dict[(pos, elem_i)]:
                         pat = gra_pat_map[' '.join(gra_cand)]
                         gra_dict = dict(zip(gra_index, gra_cand))
                         if col_pat_dict[(pos, elem_i)]:
-                            for col_cand, col_index in col_pat_dict[(pos, elem_i)]:
-                                col_index = [i for i in col_index if i < gra_index[0]]
+                            for col_cand, col_index in col_pat_dict[
+                                (pos, elem_i)
+                            ]:
+                                col_index = [i for i in col_index
+                                             if i < gra_index[0]]
                                 if not set(col_index) <= set(gra_index):
                                     # if True:
                                     # print col_index, gra_index, not set(col_index) <=
                                     # set(gra_index)
-                                    com_index = sorted(list(set(gra_index) | set(col_index)))
+                                    # print('<<<here', com_index)
+                                    com_index = sorted(
+                                        list(set(gra_index) | set(col_index)))
                                     com_cand = []
                                     for i in com_index:
                                         if i == elem_i:
@@ -213,34 +231,50 @@ def mapper():
                                         elif i in col_index:
                                             com_cand.append(lemmas[i].lower())
                                     pat = ' '.join(com_cand)
-                                    iocs = ' '.join([lemmas[i].lower() for i in com_index])
-                                    example = ' '.join(words[com_index[0]:com_index[-1] + 1])
-                                    prev, aftr = get_prev_aftr_word(words, chunkposs, com_index)
-                                    example = '{}[{}]{}'.format(prev, example, aftr)
+                                    iocs = ' '.join([lemmas[i].lower()
+                                                     for i in com_index])
+                                    example = ' '.join(
+                                        words[com_index[0]:com_index[-1] + 1])
+                                    prev, aftr = get_prev_aftr_word(
+                                        words, chunkposs, com_index)
+                                    example = '{}[{}]{}'.format(prev, example,
+                                                                aftr)
                                     patdata = '{}:{}\t{}\t{}\t{}'.format(
-                                        lemmas[elem_i].lower(), pos_map[pos], pat, iocs, example)
+                                        lemmas[elem_i].lower(), pos_map[pos],
+                                        pat, iocs, example)
                                     table[patdata] += 1
                                     print(patdata)
             else:
                 if chose == 'grammar':
-                    wordElement = PGelements.word2Element(words, lemmas, poss, chunkposs)
+                    wordElement = PGelements.word2Element(words, lemmas, poss,
+                                                          chunkposs)
                     keywordpos, pat_poslen = PGpatterns.Keywordpos, PGpatterns.Pat_poslen
                 elif chose == 'collocation':
-                    wordElement = Colelements.word2Element(words, lemmas, poss, chunkposs)
+                    wordElement = Colelements.word2Element(words, lemmas, poss,
+                                                           chunkposs)
                     keywordpos, pat_poslen = Colpatterns.Keywordpos, Colpatterns.Pat_poslen
                 # print '\n'
                 # for word, lemma, pos, chunkpos, element in izip(words, lemmas, poss, chunkposs, wordElement):
-                    # print '{}\t{}\t{}\t{}\t{}'.format(word, lemma, pos, chunkpos, element)
-                for pos, elem_i, cand, index in gen_candiate(wordElement, words, lemmas, keywordpos, pat_poslen):
+                # print '{}\t{}\t{}\t{}\t{}'.format(word, lemma, pos, chunkpos, element)
+                for pos, elem_i, cand, index in gen_candiate(
+                    wordElement, words, lemmas, keywordpos,
+                    pat_poslen):  # pos:N elem_i:6 cand:['by', 'N'] index:[4, 6]
                     example = ' '.join(words[index[0]:index[-1] + 1])
+                    example_sym = {
+                        i - index[0]: c
+                        for i, c in zip(index, cand)
+                    }  # joe
                     prev, aftr = get_prev_aftr_word(words, chunkposs, index)
                     example = '{}[{}]{}'.format(prev, example, aftr)
-                    if chose == 'grammar':
+                    if chose == 'grammar':  # <-- HERE
+
                         pat = []
                         for w in cand:
                             if w in keywordpos:
-                                if w in ['ADJER', 'ADJEST', 'V-ed', 'ADJERP', 'ADJESTP']:
-                                    pat.append('{}'.format(words[elem_i].lower()))
+                                if w in ['ADJER', 'ADJEST', 'V-ed', 'ADJERP',
+                                         'ADJESTP']:
+                                    pat.append(
+                                        '{}'.format(words[elem_i].lower()))
                                 else:
                                     pat.append(lemmas[elem_i].lower())
                             else:
@@ -248,19 +282,23 @@ def mapper():
                         pat = ' '.join(pat)
                         iocs = ' '.join([lemmas[j] for j in index])
                         pos_map, pat_map = PGpatterns.Pos_map, PGpatterns.Pat_map
-                        patdata = '{}:{}\t{}\t{}\t{}'.format(
-                            lemmas[elem_i].lower(), pos_map[pos], pat, iocs, example)
+                        patdata = '{}:{}\t{}\t{}\t{}\t{}'.format(
+                            lemmas[elem_i].lower(), pos_map[pos], pat, iocs,
+                            example, repr(example_sym))
                     elif chose == 'collocation':
                         iocs = ' '.join([lemmas[j] for j in index])
                         pat = '({}){}'.format(' '.join(cand), iocs)
                         pos_map, pat_map = Colpatterns.Pos_map, Colpatterns.Pat_map
-                        patdata = '{}:{}\t{}\t{}\t{}'.format(
-                            lemmas[elem_i].lower(), pos_map[pos], pat, iocs, example)
+                        patdata = '{}:{}\t{}\t{}\t{}\t{}'.format(
+                            lemmas[elem_i].lower(), pos_map[pos], pat, iocs,
+                            example, json.dumps(example_sym))
                     table[patdata] += 1
-                    # print patdata
+                    # print(patdata, 1)
+
     for patdata, cnt in table.items():
         print('{}\t{}'.format(patdata, cnt))
     fileinput.close()
+
 
 if __name__ == '__main__':
     mapper()
