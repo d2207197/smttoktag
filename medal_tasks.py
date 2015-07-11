@@ -10,6 +10,7 @@ import sys
 from sbc4_tm_lm_tasks import sbc4_tok_tag_tm, sbc4_tag_lm
 from collections import Counter, defaultdict
 from operator import itemgetter
+from itertools import chain
 from functools import reduce
 orig_ench = gentask.localtarget_task('src_data/medal.ench.txt')
 
@@ -81,7 +82,11 @@ class MosesPhraseTable(dict):
             for en_pos, ch_pos in aligns:
                 aligns_dict[en_pos].append(ch_pos)
 
-            self[en.strip()] = PhraseInfo(
+            en = en.strip()
+            if en not in self:
+                self[en] = []
+
+            self[en.strip()].append(PhraseInfo(
                 ch=ch.strip().split(),
                 aligns=aligns_dict,
                 scores={
@@ -89,7 +94,7 @@ class MosesPhraseTable(dict):
                     'inv lex weight': inv_lex_w,
                     'dir phrase prob': dir_phrase_prob,
                     'dir lex weight': dir_lex_w
-                })
+                }))
             # print(self[en.strip()])
             # time.sleep(0.5)
 
@@ -107,6 +112,9 @@ import warnings
 
 
 class spg(luigi.Task):
+    IMPORTANT_TAGS = frozenset(['V', 'sth', 'adjp', 'advp', 'inf', 'wh',
+                                'doing'])
+
     def requires(self):
         return {
             'en patterns': en_patterns_pretty(),
@@ -115,6 +123,63 @@ class spg(luigi.Task):
 
     def output(self):
         return luigi.LocalTarget(str(target_dir / 'spg.json'))
+
+    @staticmethod
+    def phraseinfo_to_ch_pattern(phraseinfo, en_tags):
+        ch_tags = []
+        for en_pos, tag in en_tags.items():
+            if (tag in spg.IMPORTANT_TAGS) and (
+                en_pos not in phraseinfo.aligns):
+                warnings.warn(
+                    'important word not aligned: {}:{} not in {}'.format(
+                        en_pos, tag, phraseinfo))
+                return None
+            if en_pos in phraseinfo.aligns:
+                ch_tags.append((phraseinfo.aligns[en_pos], tag))
+
+        ch_pattern = []
+        important_pos = set()
+        for ch_poss, tag in ch_tags:
+            if any(ch_pos in important_pos for ch_pos in ch_poss):
+                return None
+
+            if tag in spg.IMPORTANT_TAGS:
+                important_pos.update(ch_poss)
+
+            if tag == 'V':
+                for ch_pos in ch_poss:
+                    ch_pattern.append(
+                        (ch_pos, '{}:{}'.format(phraseinfo.ch[ch_pos], tag)))
+
+            elif tag in spg.IMPORTANT_TAGS:
+                for ch_pos in ch_poss[0:1]:
+                    ch_pattern.append((ch_pos, tag))
+
+            else:
+                for ch_pos in ch_poss:
+                    ch_pattern.append(
+                        (ch_pos, '{}:{}'.format(phraseinfo.ch[ch_pos], tag)))
+
+        ch_pattern = ' '.join(map(itemgetter(1), sorted(ch_pattern,
+                                                        key=itemgetter(0))))
+        return ch_pattern
+
+    @staticmethod
+    def en_instance_find_ch_patterns(instance, en_tags, phrasetable):
+
+        if instance not in phrasetable:  # phrasetable 中沒有 instance
+            warnings.warn('instance not in phrase-table: {}'.format(instance))
+            return []
+
+        phraseinfos = phrasetable[instance]
+
+        ch_patterns = (
+            spg.phraseinfo_to_ch_pattern(phraseinfo, en_tags)
+            for phraseinfo in phraseinfos
+        )
+        ch_patterns = [ch_pattern for ch_pattern in ch_patterns if ch_pattern]
+
+        return ch_patterns
 
     def run(self):
         import gzip
@@ -140,63 +205,11 @@ class spg(luigi.Task):
 
                 instance = instance_info['instance']
                 en_tags = {int(k): v for k, v in instance_info['tag'].items()}
+                ch_pattern = spg.en_instance_find_ch_patterns(instance,
+                                                              en_tags,
+                                                              phrasetable)
 
-                if instance not in phrasetable:
-                    warnings.warn(
-                        'instance not in phrase-table: {}'.format(instance))
-                    continue
-
-                phrase_info = phrasetable[instance]
-
-                if 0 not in phrase_info.aligns:
-                    warnings.warn(
-                        'no anchor verb: {}'.format(phrasetable[instance]))
-                    continue
-
-                ch_tags = [
-                    (phrase_info.aligns[en_pos], tag)
-                    for en_pos, tag in en_tags.items()
-                    if en_pos in phrase_info.aligns
-                ]
-
-                ch_pattern = []
-                important_tags = frozenset(['V', 'sth', 'adjp', 'advp', 'inf',
-                                            'wh', 'doing'])
-                important_pos = set()
-                for ch_poss, tag in sorted(ch_tags, key=itemgetter(0)):
-                    if any(ch_pos in important_pos for ch_pos in ch_poss):
-                        break
-
-                    if tag in important_tags:
-                        important_pos.update(ch_poss)
-
-                    if tag == 'V':
-                        for ch_pos in ch_poss:
-                            ch_pattern.append(
-                                (ch_pos,
-                                 '{}:{}'.format(phrase_info.ch[ch_pos], tag)))
-                    elif tag in important_tags:
-                        for ch_pos in ch_poss:
-                            ch_pattern.append((ch_pos, tag))
-
-                    else:
-                        for ch_pos in ch_poss:
-                            ch_pattern.append(
-                                (ch_pos,
-                                 '{}:{}'.format(phrase_info.ch[ch_pos], tag)))
-
-                else:
-                    ch_pattern = list(map(itemgetter(1),
-                                          sorted(ch_pattern,
-                                                 key=itemgetter(0))))
-
-                    #  [ 'X', 'X', 'A', 'B', 'B', 'B', 'X' ] ->  ['X', 'A', 'B', 'X']  # merge continuous tag
-                    ch_pattern = reduce(lambda x, z: x + [z] if x[-1] != z else
-                                        x, ch_pattern[1:], ch_pattern[:1])
-                    ch_patterns.append(
-                        ' '.join(ch_pattern)
-                    )  #+ '\n' + repr(instance) + '\n' +
-                    # repr(phrase_info) + '\n' + repr(en_tags))
+                ch_patterns.extend(ch_pattern)
 
             ch_patterns_cnter = Counter(ch_patterns)
             pattern[
