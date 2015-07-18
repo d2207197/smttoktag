@@ -76,6 +76,8 @@ def line2structed(line):
 PatData = namedtuple('PatData', ['wordpos', 'pat', 'iocs', 'example',
                                  'instance_sym', 'cnt'])
 
+# import pdb
+
 
 def reducer():
     table = {}
@@ -83,13 +85,15 @@ def reducer():
     structed_lines = map(line2structed, lines)
     for wordpos, wordposdatas in groupby(structed_lines,
                                          key=attrgetter('wordpos')):
-        patterns = WordPat(1, 10)
+        patterns = WordPat(1, 5)
         # wordpos_cnt, patterns = 0, WordPat(0, 0)
         pat_dict = defaultdict(list)
         for wordposdata in wordposdatas:
             patterns[wordposdata.pat] += wordposdata.cnt
             pat_dict[wordposdata.pat].append(wordposdata)
         patterns.calc_metrics()
+        # if wordpos == 'important:ADJ':
+        # pdb.set_trace()
         isgoodpat = False
         for pat, pat_cnt in patterns.most_common():
             if not isgoodpat:
