@@ -140,104 +140,6 @@ def untok(inf, outf, *, sep=' '):
 
 
 @simpletask
-def geniatagger(inf, outf):
-    geniatagger_cmd = ['geniatagger', '-nt']
-    call(geniatagger_cmd, stdin=inf, stdout=outf)
-
-
-def chunk_BII2IIH(chunk_tags):
-    # print(tagged_sent)
-    # print(list(zip(*tagged_sent)))
-    chunk = []
-    new_chunk_tags = []
-    for chunk_tag in chunk_tags:
-        if not chunk_tag.startswith('I-') and chunk:
-            chunk[0] = chunk[0].replace('B-', 'I-')
-            chunk[-1] = chunk[-1].replace('I-', 'H-')
-            new_chunk_tags.extend(chunk)
-            chunk = []
-        if chunk_tag == 'O':
-            new_chunk_tags.append(chunk_tag)
-        else:
-            chunk.append(chunk_tag)
-    if chunk:
-        chunk[0] = chunk[0].replace('B-', 'I-')
-        chunk[-1] = chunk[-1].replace('I-', 'H-')
-        new_chunk_tags.extend(chunk)
-    return new_chunk_tags
-
-
-@simpletask
-def genia_line_IIH(inf, outf):
-    lines = tools.line_stripper(inf)
-    for sublines in tools.blank_line_splitter(lines):
-        sublines = [line.split('\t') for line in sublines]
-        word, lemma, tag, chunk, _ = zip(*sublines)
-        chunk = chunk_BII2IIH(chunk)
-        with contextlib.redirect_stdout(outf):
-            print(*word, end='\t')
-            print(*lemma, end='\t')
-            print(*tag, end='\t')
-            print(*chunk)
-
-
-def patterns(task_name, input_task, output_file):
-    class task(luigi.Task):
-        def requires(self):
-            return input_task
-
-        def output(self):
-            return luigi.LocalTarget(str(output_file))
-
-        def run(self):
-            import os
-            working_directory = Path('Collocation_syntax/')
-            output_folder = Path(self.output().fn).absolute()
-
-            mapper = './mapper.py'
-            reducer = './reducer.py'
-
-            lmr_cmd = ['lmr', '1m', '32', mapper, reducer,
-                       output_folder.as_posix()]
-            with self.input().open('r') as input_data:
-                cwd = Path.cwd()
-                os.chdir(working_directory.as_posix())
-                call(lmr_cmd, stdin=input_data)
-                os.chdir(cwd.as_posix())
-
-    task.__name__ = task_name
-    return task
-
-
-class pattern_json_reformat_jqscript(luigi.ExternalTask):
-    def output(self):
-        return luigi.LocalTarget('pattern.reformat.jq')
-
-
-def patterns_pretty(task_name, input_task, output_file):
-    class task(luigi.Task):
-        def requires(self):
-            return {
-                'patterns_json': input_task,
-                'jq script': pattern_json_reformat_jqscript()
-            }
-
-        def output(self):
-            return luigi.LocalTarget(str(output_file))
-
-        def run(self):
-            jq_input_files = [fpath.as_posix() for fpath in Path(
-                self.input()['patterns_json'].fn).glob('reducer-*')]
-            jq_cmd = ['jq', '-s', '-f',
-                      self.input()['jq script'].fn] + list(jq_input_files)
-            with self.output().open('w') as outf:
-                call(jq_cmd, stdout=outf)
-
-    task.__name__ = task_name
-    return task
-
-
-@simpletask
 def word_tokenize(inf, outf):
     import nltk
     for line in inf:
@@ -253,6 +155,8 @@ def unidecode(inf, outf):
 
 
 def localtarget_task(path):
+    path = str(path)
+
     class task(luigi.ExternalTask):
         def output(self):
             return luigi.LocalTarget(path)
