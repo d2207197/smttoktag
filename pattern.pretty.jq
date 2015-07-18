@@ -1,6 +1,6 @@
 add 
 | to_entries 
-|  map(select(.key |endswith(":V") )) 
+#|  map(select(.key |endswith(":V") )) 
 # | map(select(.value[0]> 40))  
 | map(
   {

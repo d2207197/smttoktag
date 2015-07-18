@@ -1,0 +1,1 @@
+map(  (.ch_patterns[] | { ch_pattern: .pattern, cnt: .cnt } ) + { en_pattern: .en_pattern } ) | group_by(.ch_pattern) | map({ch_pattern: .[0].ch_pattern,  cnt: ([.[].cnt] | add )    ,  en_patterns: ( map({en_pattern: .en_pattern, cnt: .cnt})   )}   ) | sort_by(- .cnt)
