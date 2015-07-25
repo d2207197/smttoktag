@@ -3,6 +3,14 @@
 
 from functools import singledispatch, update_wrapper, wraps
 
+# def ngrams(words, l):
+#     for ngram in zip(*(words[i:] for i in range(l))):
+#         yield ' '.join(ngram)
+
+
+def ngrams(words, length):
+    return zip(*[words[i:] for i in range(0, length)])
+
 
 def methdispatch(func):
     dispatcher = singledispatch(func)

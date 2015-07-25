@@ -13,6 +13,8 @@ from operator import itemgetter
 from itertools import chain
 from functools import reduce
 import gentask_pattern
+import gentask_spg
+
 ch = gentask.localtarget_task('tgt_data/moviesub/ch.txt')
 en = gentask.localtarget_task('tgt_data/moviesub/en.txt')
 
@@ -70,8 +72,11 @@ en_chtok = gentask.parallel_lines_merge('en_chtok', en(), ch_tok(),
 # giza_task = gentask_giza.giza(inputf=str(target_dir / 'en_chtok.txt'),
 #                               outputd=str(target_dir / 'giza/'))
 
-phrasetable = gentask.localtarget_task(target_dir / 'moses-train' / 'model' /
-                                       'phrase-table.gz')
+phrasetable = gentask.localtarget_task(target_dir / 'phrase-table.gz')
+
+print(target_dir)
+spg = gentask_spg.spg('spg', filtered_patterns, phrasetable,
+                      target_dir / 'spg.json')
 
 if __name__ == '__main__':
     luigi.interface.setup_interface_logging()
@@ -82,8 +87,8 @@ if __name__ == '__main__':
     # w.add(patterns_allline_task)
     # w.add(filtered_patterns())
     # w.add(ch_toktag(parallel_params='--slf .'))
-    w.add(ch_tok())
-    # w.add(spg())
+    # w.add(ch_tok())
+    w.add(spg())
 
     w.run()
 
