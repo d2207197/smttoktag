@@ -1,2 +1,8 @@
 * zh_tok_tagger
 chinese tokenizer and POS tagger based on statistical machine translation
+
+#+BEGIN_SRC sh
+./toktagger.py -t tgt_data/sbc4/toktag.phrasetable.h5 -l tgt_data/sbc4/tag.blm -f verbose <<< 我下週要去旅行
+# Output: 我下週要去旅行	我 下 週 要 去 旅行	Nh Nes Nf D D VA	Nh + Nes Nf + D D VA	-36.222996470898366
+#+END_SRC
+
