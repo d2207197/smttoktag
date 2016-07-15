@@ -2,7 +2,31 @@
 chinese tokenizer and POS tagger based on statistical machine translation
 
 #+BEGIN_SRC sh
-./toktagger.py -t tgt_data/sbc4/toktag.phrasetable.h5 -l tgt_data/sbc4/tag.blm -f verbose <<< 我下週要去旅行
-# Output: 我下週要去旅行	我 下 週 要 去 旅行	Nh Nes Nf D D VA	Nh + Nes Nf + D D VA	-36.222996470898366
+$ ./toktagger.py -t tgt_data/sbc4/toktag.phrasetable.h5 -l tgt_data/sbc4/tag.blm -f verbose <<< 我下週要去旅行
+我下週要去旅行	我 下 週 要 去 旅行	Nh Nes Nf D D VA	Nh + Nes Nf + D D VA	-36.222996470898366
+$ cat infiles | ./toktagger.py -t tgt_data/sbc4/toktag.phrasetable.h5 -l tgt_data/sbc4/tag.blm > outfile
 #+END_SRC
 
+
+** usage
+
+#+BEGIN_EXAMPLE
+./toktagger.py --help
+usage: toktagger.py [-h] --translation-model H5_FILE_PATH --language-model
+                    KENLM_BLM_PATH [--format {verbose,tab,/}]
+                    [FILE [FILE ...]]
+
+Chinese tokenzier and Part-Of-Speech tagger.
+
+positional arguments:
+  FILE                  input file(text in chinese)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --translation-model H5_FILE_PATH, -t H5_FILE_PATH
+                        Pytables Phrase Table
+  --language-model KENLM_BLM_PATH, -l KENLM_BLM_PATH
+                        KenLM BLM
+  --format {verbose,tab,/}, -f {verbose,tab,/}
+                        output format
+#+END_SRC
