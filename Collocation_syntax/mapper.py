@@ -13,6 +13,8 @@ import Colpatterns
 import Colelements
 import genPatterns
 import json
+
+import warnings
 """ Linux cmd:
 pv 100000citeseerx.sents.tagged.h | lmr 5m 4 'python pgp_mapper.py' 'python pgp_reducer.py' pgp_test
 pv citeseerx.sents.tagged.h | lmr 100m 40 'python pgp_mapper.py' 'python pgp_reducer.py' pgp_
@@ -26,8 +28,11 @@ pv 100000citeseerx.sents.tagged.h | lmr 5m 4 'python com_mapper.py' 'python com_
 pv citeseerx.sents.tagged.h | lmr 100m 40 'python com_mapper.py' 'python com_reducer.py' com_
 pv bnc_tagged.h | lmr 25m 10 'python com_mapper.py' 'python com_reducer.py' bnc_com_
 """
+from pathlib import Path
+filedir = Path(__file__).absolute().parent
 chose = ['grammar', 'collocation', 'combine'][0]
-aklWords = set(line.rstrip() for line in open('writeaway_word.txt'))
+aklWords = set(line.rstrip()
+               for line in (filedir / 'writeaway_word.txt').open())
 
 
 def pat_product(word_elements, pos, elem_i, prelen, aftlen, keywordPos):
@@ -185,9 +190,12 @@ def mapper():
         words, lemmas = words[0].lower() + words[1:], lemmas[0].lower(
         ) + lemmas[1:]
         words, lemmas = list(map(methodcaller('split'), (words, lemmas)))
+        poss, chunkposs = list(map(methodcaller('split'), (poss, chunkposs)))
+        if not (len(words) == len(lemmas) == len(poss) == len(chunkposs)):
+            warnings.warn('Unequal length: {} {} {} {}'.format(
+                words, lemmas, poss, chunkposs))
+            continue
         if set(words + lemmas) & aklWords:
-            poss, chunkposs = list(map(methodcaller('split'),
-                                       (poss, chunkposs)))
             if chose == 'combine':
                 wordElement = PGelements.word2Element(words, lemmas, poss,
                                                       chunkposs)
@@ -237,8 +245,10 @@ def mapper():
                                         words[com_index[0]:com_index[-1] + 1])
                                     prev, aftr = get_prev_aftr_word(
                                         words, chunkposs, com_index)
-                                    example = '{}[{}]{}'.format(prev, example,
-                                                                aftr)
+                                    # example = '{}[{}]{}'.format(prev, example,
+                                    # aftr)
+                                    example = '[{}]'.format(prev, example,
+                                                            aftr)
                                     patdata = '{}:{}\t{}\t{}\t{}'.format(
                                         lemmas[elem_i].lower(), pos_map[pos],
                                         pat, iocs, example)
@@ -258,14 +268,16 @@ def mapper():
                 # print '{}\t{}\t{}\t{}\t{}'.format(word, lemma, pos, chunkpos, element)
                 for pos, elem_i, cand, index in gen_candiate(
                     wordElement, words, lemmas, keywordpos,
-                    pat_poslen):  # pos:N elem_i:6 cand:['by', 'N'] index:[4, 6]
+                    pat_poslen):  # pos:N elem_i:6 cand:\['by', 'N'] index:[4, 6]
                     example = ' '.join(words[index[0]:index[-1] + 1])
                     example_sym = {
                         i - index[0]: c
                         for i, c in zip(index, cand)
                     }  # joe
                     prev, aftr = get_prev_aftr_word(words, chunkposs, index)
-                    example = '{}[{}]{}'.format(prev, example, aftr)
+
+                    # example = '{}[{}]{}'.format(prev, example, aftr)
+                    example = '[{}]'.format(example)
                     if chose == 'grammar':  # <-- HERE
 
                         pat = []

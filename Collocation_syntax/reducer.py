@@ -88,8 +88,20 @@ def reducer():
         patterns = WordPat(1, 5)
         # wordpos_cnt, patterns = 0, WordPat(0, 0)
         pat_dict = defaultdict(list)
-        for wordposdata in wordposdatas:
+        for iocs, grouped_wordposdatas in groupby(
+            sorted(wordposdatas,
+                   key=lambda x: (x.pat, x.example)),
+            key=lambda x: (x.pat, x.example)):
+            grouped_wordposdatas = list(grouped_wordposdatas)
+            # if len(grouped_wordposdatas) > 2:
+            # print('group start')
+            wordposdata = grouped_wordposdatas[0]._replace(
+                cnt=sum(wpd.cnt for wpd in grouped_wordposdatas))
+
+            # for wordposdata in grouped_wordposdatas:
             patterns[wordposdata.pat] += wordposdata.cnt
+            # if len(grouped_wordposdatas) > 2:
+            # print(wordposdata)
             pat_dict[wordposdata.pat].append(wordposdata)
         patterns.calc_metrics()
         # if wordpos == 'important:ADJ':
@@ -107,7 +119,8 @@ def reducer():
             iocs_dict = defaultdict(list)
             for patdata in pat_dict[pat]:
                 iocss[patdata.iocs] += patdata.cnt
-                iocs_dict[patdata.iocs].append(patdata)
+                if patdata.cnt > 3:  ## 篩選 instance 的次數
+                    iocs_dict[patdata.iocs].append(patdata)
             # iocss.calc_metrics()
             example_list = []
             # print '\t', pat, pat_cnt

@@ -72,11 +72,33 @@ en_chtok = gentask.parallel_lines_merge('en_chtok', en(), ch_tok(),
 # giza_task = gentask_giza.giza(inputf=str(target_dir / 'en_chtok.txt'),
 #                               outputd=str(target_dir / 'giza/'))
 
-phrasetable = gentask.localtarget_task(target_dir / 'phrase-table.gz')
+unpack_singleline_patterns = gentask.localtarget_task(
+    target_dir / 'en.gt.hiih.patterns.pretty.unpack_singleline.json')
+
+phrasetable = gentask.localtarget_task(target_dir / 'phrase-table.10000.gz')
+
+h5_phrasetable = gentask_spg.h5_phrasetable('h5_phrasetable', phrasetable,
+                                            target_dir / 'phrase-table.h5',
+                                            reverse=True)
 
 print(target_dir)
-spg = gentask_spg.spg('spg', filtered_patterns, phrasetable,
+spg = gentask_spg.spg('spg', unpack_singleline_patterns, h5_phrasetable,
                       target_dir / 'spg.json')
+filtered_spg = gentask_spg.filter_spg('filter_spg', spg(),
+                                      target_dir / 'spg.filtered.json')
+spg_with_sentence = gentask_spg.spg_find_sentence(
+    'spg_find_sentence', filtered_spg(), en(), ch(),
+    target_dir / 'spg.filtered.with_sentences.json')
+
+spg_sampled = gentask.shuf('spg_shuf', spg_with_sentence(),
+                           target_dir / 'spg.filtered.with_sentences.100.json',
+                           n=100)
+
+spg_flat = gentask_spg.spg_flatten('spg_flatten', spg_sampled(), target_dir /
+                                   'spg.filtered.with_sentences.100.flat.json')
+
+spg_txt = gentask_spg.spg_txt('spg_txt', spg_flat(), target_dir /
+                              'spg.filtered.with_sentences.100.flat.txt')
 
 if __name__ == '__main__':
     luigi.interface.setup_interface_logging()
@@ -88,8 +110,12 @@ if __name__ == '__main__':
     # w.add(filtered_patterns())
     # w.add(ch_toktag(parallel_params='--slf .'))
     # w.add(ch_tok())
-    w.add(spg())
-
+    # w.add(spg())
+    # w.add(filtered_spg())
+    # w.add(spg_with_sentence())
+    # w.add(spg_sampled())
+    # w.add(spg_flat())
+    w.add(spg_txt())
     w.run()
 
     # w.add(giza_task)

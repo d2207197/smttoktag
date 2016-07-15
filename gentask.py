@@ -439,3 +439,9 @@ def zhtoktag(task_name, input_task, output_file, *, tm, lm):
 
     task.__name__ = task_name
     return task
+
+
+@simpletask
+def shuf(inf, outf, n=100, zero=False):
+    shuf_cmd = ['shuf', '-n', str(n)] + (['-z'] if zero else [])
+    call(shuf_cmd, stdin=inf, stdout=outf)
