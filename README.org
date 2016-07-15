@@ -1,0 +1,2 @@
+* zh_tok_tagger
+chinese tokenizer and POS tagger based on statistical machine translation
