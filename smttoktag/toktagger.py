@@ -33,7 +33,7 @@ class SegInfo(namedtuple('SegInfo', ['zh', 'zh_seg', 'tag', 'tag_cat',  'pr'])):
 from functools import lru_cache
 from math import log
 import sys
-import tools
+from . import tools
 from functools import update_wrapper
 
 
