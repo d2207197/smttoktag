@@ -1,7 +1,7 @@
 import sys
 import argparse
 
-from .toktagger import PyTablesTM, ZhTokTagger, KenLM
+from . import PyTablesTM, ZhTokTagger, KenLM
 
 def argparser(args=sys.argv[1:]):
     parser = argparse.ArgumentParser(description='Chinese tokenzier and Part-Of-Speech tagger.')
