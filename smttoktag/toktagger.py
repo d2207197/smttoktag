@@ -4,6 +4,8 @@
 
 from collections import namedtuple
 from functools import total_ordering, reduce
+from funcacher import FunCacher
+funcacher = FunCacher()
 
 
 @total_ordering
@@ -56,7 +58,7 @@ class PyTablesTM:
     def __exit__(self, type, value, traceback):
         self.h5.close()
 
-    @lru_cache()
+    #@funcacher('pytablestm', is_method=True)
     def __getitem__(self, zh):
         return [
             SegInfo(x['zh'].decode('utf8'),
@@ -92,7 +94,7 @@ class KenLM:
     update_wrapper(__call__, __getitem__)
 
 
-@lru_cache()
+@funcacher('allpartition')
 @tools.listify
 def allpartition(seq, *, max_length=3 * 5):
     max_length = min(len(seq), max_length)
@@ -138,7 +140,7 @@ class ZhTokTagger:
             (append_lmpr_tmlmpr(seginfo) for seginfo in top1_pr_seginfo_of_each_tag), key=itemgetter(-1))[-n:]
         return tuple([seginfo for seginfo, lmpr, tmlmpr in topn_with_lmpr_tmlmpr])
 
-    @lru_cache()
+    @funcacher('tok tag', is_method=True)
     def _tok_tag(self, zh_chars):
         tm_out = []
         for part1, part2 in allpartition(zh_chars):
