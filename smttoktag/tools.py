@@ -71,8 +71,7 @@ def blank_line_splitter(lines):
 import re
 CHNUM = '〇一二兩三四五六七八九十百千萬億兆'
 NUM = '0123456789'
-CHNUMBERS_RE = re.compile(r'[{}]+'.format(CHNUM))
-NUMBERS_RE = re.compile(r'[{}]+'.format(NUM))
+NUMBERS_RE = re.compile(r'[{}]+|[{}]+'.format(CHNUM, NUM))
 
 import string
 LATIN_LETTERS_RE = re.compile(
@@ -80,44 +79,66 @@ LATIN_LETTERS_RE = re.compile(
     r'[-/.﹒~—─=*&_’]*(?:[{letters}]+[-/.﹒~—─=*&_’]*)+'.format(
         letters=string.ascii_letters))
 
+def strQ2B(ustring):
+    "全形拉丁字母、數字、符號轉半形"
+    rstring = ""
+    for uchar in ustring:
+        inside_code = ord(uchar)
+
+        if inside_code == 0x3000:
+            inside_code = 0x0020
+        # elif 0xff01 <= inside_code <= 0xff0f:
+        # pass
+        else:
+            inside_code -= 0xfee0
+        if inside_code < 0x0020 or inside_code > 0x7e:
+            rstring += uchar
+        else:
+            rstring += chr(inside_code)
+    return rstring
+
+def is_number(x):
+    try:
+        float(x)
+    except ValueError:
+        return False
+    else:
+        return True
+
+
+
+def restore_tag(tagged_s, tag, orig_strs):
+    def iter_orig_strs(m):
+        iter_orig_strs.i += 1
+        return orig_strs[iter_orig_strs.i]
+    iter_orig_strs.i = -1
+    return re.sub(tag, iter_orig_strs, tagged_s)
+    
+
+def number2tag(s):
+    PLACE_HOLDER = '{{CD}}'
+    PLACE_HOLDER_LEN = len(PLACE_HOLDER)
+    if is_number(s):
+        return '{{CD}}'
+    matches = list(NUMBERS_RE.finditer(s))
+    matched_number_strs = [m.group() for m in matches]
+    matched_spans = [m.span() for m in matches]
+    
+    unmatched_substrs = []
+    last_end = 0
+    for start, end in matched_spans:
+        unmatched_substrs.append(s[last_end:start])
+        last_end = end
+    unmatched_substrs.append(s[last_end:])
+    
+    return '{{CD}}'.join(unmatched_substrs), matched_number_strs
+
+
+def fw2tag(s):
+    s = re.sub(LATIN_LETTERS_RE, '{{FW}}', s)
+    return s
 
 def zhsent_preprocess(s):
-    def strQ2B(ustring):
-        "全形拉丁字母、數字、符號轉半形"
-        rstring = ""
-        for uchar in ustring:
-            inside_code = ord(uchar)
-
-            if inside_code == 0x3000:
-                inside_code = 0x0020
-            # elif 0xff01 <= inside_code <= 0xff0f:
-            # pass
-            else:
-                inside_code -= 0xfee0
-            if inside_code < 0x0020 or inside_code > 0x7e:
-                rstring += uchar
-            else:
-                rstring += chr(inside_code)
-        return rstring
-
-    def is_number(x):
-        try:
-            float(x)
-        except ValueError:
-            return False
-        else:
-            return True
-
-    def number2tag(s):
-
-        if is_number(s):
-            return '{{CD}}'
-        s = re.sub(CHNUMBERS_RE, '{{CD}}', s)
-        return re.sub(NUMBERS_RE, '{{CD}}', s)
-
-    def fw2tag(s):
-        s = re.sub(LATIN_LETTERS_RE, '{{FW}}', s)
-        return s
 
     s = strQ2B(s)
     # zh_chars = ' '.join(nltk.word_tokenize(zh_chars))
