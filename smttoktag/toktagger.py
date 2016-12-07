@@ -164,10 +164,11 @@ class ZhTokTagger:
         '''>>> zhtagger('今天出去玩')
 ("今天出去玩", "今天 出去 玩", "Nd VA VC", "Nd + VA VC", -22.90191810211992, -8.768468856811523, -31.670386958931445)'''
         zh_chars = zh_chars.strip()
-        zh_chars = tools.zhsent_preprocess(zh_chars)
+        zh_chars, restore_all_place_holders = tools.zhsent_preprocess(zh_chars)
         zh_chars = tools.zh_and_special_tokenize(zh_chars)
         sents = tools.zhsent_tokenize(zh_chars)
         sents_seginfos = [self._tok_tag(sent)[-1] for sent in sents]
-        return reduce(lambda a, b: a + b, sents_seginfos)
+        seginfo = reduce(lambda a, b: a + b, sents_seginfos)
+        return seginfo._replace(zh_seg=restore_all_place_holders(seginfo.zh_seg))
 
 

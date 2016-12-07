@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from functools import singledispatch, update_wrapper, wraps
+from functools import singledispatch, update_wrapper, wraps, partial
+from cytoolz import curry, compose
 
 # def ngrams(words, l):
 #     for ngram in zip(*(words[i:] for i in range(l))):
@@ -107,44 +108,68 @@ def is_number(x):
 
 
 
-def restore_tag(tagged_s, tag, orig_strs):
+def restore_place_holder(tagged_s, place_holder, orig_strs):
     def iter_orig_strs(m):
         iter_orig_strs.i += 1
         return orig_strs[iter_orig_strs.i]
     iter_orig_strs.i = -1
-    return re.sub(tag, iter_orig_strs, tagged_s)
-    
+    return re.sub(place_holder, iter_orig_strs, tagged_s)
 
-def number2tag(s):
-    PLACE_HOLDER = '{{CD}}'
-    PLACE_HOLDER_LEN = len(PLACE_HOLDER)
-    if is_number(s):
-        return '{{CD}}'
-    matches = list(NUMBERS_RE.finditer(s))
-    matched_number_strs = [m.group() for m in matches]
-    matched_spans = [m.span() for m in matches]
-    
-    unmatched_substrs = []
-    last_end = 0
-    for start, end in matched_spans:
-        unmatched_substrs.append(s[last_end:start])
-        last_end = end
-    unmatched_substrs.append(s[last_end:])
-    
-    return '{{CD}}'.join(unmatched_substrs), matched_number_strs
+from typing import Tuple, List
+
+from functools import partial
+
+def replace_re_to_place_holder(s, regex: re._pattern_type, place_holder: str) -> Tuple[str, List[str]]:
+
+    def _replacer(match_obj) -> Tuple[str, List[str]]:
+        sub_s = match_obj.group(0)
+        _replacer.matched_strs += [m.group() for m in regex.finditer(sub_s)]
+        replaced_sub_str = regex.sub(place_holder, sub_s)
+        return replaced_sub_str
+    _replacer.matched_strs = []
+
+    replaced_str = re.sub(r'(^|(?<=}})).*?((?={{)|$)', _replacer, s)
+    return replaced_str, _replacer.matched_strs
+
+find_n_replace_latins = partial(replace_re_to_place_holder, regex=LATIN_LETTERS_RE, place_holder='{{FW}}')
+find_n_replace_numbers = partial(replace_re_to_place_holder, regex=NUMBERS_RE, place_holder='{{CD}}')
+
+# def number2tag(s):
+#     PLACE_HOLDER = '{{CD}}'
+#     PLACE_HOLDER_LEN = len(PLACE_HOLDER)
+
+#     if is_number(s):
+#         return '{{CD}}'
+#     matches = list(NUMBERS_RE.finditer(s))
+
+#     matched_number_strs = [m.group() for m in matches]
+#     matched_spans = [m.span() for m in matches]
+
+#     unmatched_substrs = []
+#     last_end = 0
+#     for start, end in matched_spans:
+#         unmatched_substrs.append(s[last_end:start])
+#         last_end = end
+#     unmatched_substrs.append(s[last_end:])
+
+#     return '{{CD}}'.join(unmatched_substrs), matched_number_strs
 
 
-def fw2tag(s):
-    s = re.sub(LATIN_LETTERS_RE, '{{FW}}', s)
-    return s
+# def fw2tag(s):
+#     s = re.sub(LATIN_LETTERS_RE, '{{FW}}', s)
+#     return s
 
 def zhsent_preprocess(s):
-
     s = strQ2B(s)
     # zh_chars = ' '.join(nltk.word_tokenize(zh_chars))
-    s = number2tag(s)
-    s = '{{CD}}'.join(fw2tag(subs) for subs in s.split('{{CD}}'))
-    return s
+
+    s, orig_number_strs = find_n_replace_numbers(s)
+    s, orig_latin_strs = find_n_replace_latins(s)
+
+    restore_num = partial(restore_place_holder, place_holder='{{CD}}', orig_strs = orig_number_strs)
+    restore_latin = partial(restore_place_holder, place_holder='{{FW}}', orig_strs = orig_latin_strs)
+    restore_all_place_holder = compose(restore_latin, restore_num)
+    return s, restore_all_place_holder
 
 
 ZHTOKEN_WITH_SPECIAL = re.compile(r'\{\{[^ ]+?\}\}|[^\s]', flags=re.UNICODE)
