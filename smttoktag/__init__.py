@@ -1,1 +1,1 @@
-from .toktagger import ZhTokTagger, KenLM, PyTablesTM
+from .toktagger import ZhTokTagger, KenLM, PyTablesTM, RedisTM

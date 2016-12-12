@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 
+import sys
+import pickle
 from collections import namedtuple
 from functools import total_ordering, reduce
 from funcacher import FunCacher
@@ -68,6 +70,35 @@ class PyTablesTM:
                     x['pr'],)
 
             for x in self.pytables.where('zh == {}'.format(repr(zh.encode('utf8'))))]
+
+    __call__ = __getitem__
+    update_wrapper(__call__, __getitem__)
+
+
+class RedisTM(object):
+    def __init__(self, redis_db):
+        import redis
+
+        self.r = redis.StrictRedis(host='localhost', db=redis_db)
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        r.close()
+
+    def __getitem__(self, zh):
+        if isinstance(zh, str):
+            for x in self.r.lrange(zh, 0, 20):
+                x = pickle.loads(x)
+                yield SegInfo(x['zh'],
+                              x['zh_seg'],
+                              x['tag'],
+                              x['tag'],
+                              x['pr'])
+        
+        else:
+            raise ValueError('key should be str or ')
+
 
     __call__ = __getitem__
     update_wrapper(__call__, __getitem__)
@@ -146,10 +177,14 @@ class ZhTokTagger:
         for part1, part2 in allpartition(zh_chars):
             part1_query = ''.join(part1)
 
-            seginfos1 = self.tm[part1_query]
+            seginfos1 = list(self.tm[part1_query])
             # print(part1_query, '->', seginfos1)
             if not seginfos1:
-                seginfos1 = [SegInfo(part1_query, part1_query, 'Nb', 'Nb', -17 * len(part1))]
+                seginfos1 = [SegInfo(
+                    part1_query,
+                    part1_query,
+                    'Nb',
+                    'Nb', -17 * len(part1))]
 
             if not part2:
                 tm_out.extend(seginfos1)
@@ -168,6 +203,12 @@ class ZhTokTagger:
         zh_chars = tools.zh_and_special_tokenize(zh_chars)
         sents = tools.zhsent_tokenize(zh_chars)
         sents_seginfos = [self._tok_tag(sent)[-1] for sent in sents]
+        # except:
+        #     print(sents, file=sys.stderr)
+            
+        #     print(self._tok_tag(sents[0]), file=sys.stderr)
+
+
         seginfo = reduce(lambda a, b: a + b, sents_seginfos)
         return seginfo._replace(zh_seg=restore_all_place_holders(seginfo.zh_seg))
 
